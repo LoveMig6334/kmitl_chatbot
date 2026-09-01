@@ -148,9 +148,14 @@ class Retriever(Protocol):
     async def retrieve(self, query: str, programs: list[str], k: int = 8) -> list[Chunk]: ...  # programs=[] → all
 ```
 `FixtureRetriever` (`RETRIEVER=fixture`, default) is keyword overlap over
-`tests/fixtures/chunks.jsonl` — **28 SYNTHETIC passages** (`"synthetic": true`;
-figures are invented).  Drop the real PDFs in `data/raw/*.pdf` and run
-`python scripts/build_fixtures.py` to regenerate from real pages (pymupdf).
+`tests/fixtures/chunks.jsonl` — **121 real passages** from the four PDFs in `data/raw/`
+(gitignored; AIT.pdf→AIT, DSBA.pdf→DSBA, IT_inter2565.pdf→BIT, IT2565.pdf→IT), built by
+`python scripts/build_fixtures.py`.  The PDFs typeset TH Sarabun PSK with repositioned
+vowels/tone marks as private-use codepoints; `scripts/pdf_thai.py` derives a per-file
+PUA→mark table by dictionary scoring (cached in `tests/fixtures/pua_maps.json`, hand
+overrides in `MANUAL_OVERRIDES`) and keeps ☑/☐ checkbox glyphs.  Audit with
+`python scripts/audit_fixtures.py [--sample 10]` (0 suspicious chunks expected).
+`tests/fixtures/chunks_synthetic.jsonl` (invented facts) is what the unit tests use.
 
 Flow (`RagAnswerer.answer`): rewrite → retrieve → no-answer gate → context → model → stream → citations → done.
 1. **Rewrite** (`RAG_QUERY_REWRITE=1`, one openthaigpt call) only when the message is a

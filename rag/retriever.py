@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 ProgramId = Literal["AIT", "DSBA", "BIT", "IT"]
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "chunks.jsonl"
+SYNTHETIC_FIXTURE_PATH = ROOT / "tests" / "fixtures" / "chunks_synthetic.jsonl"  # invented facts; unit tests only
 
 
 class Chunk(BaseModel):

@@ -2,22 +2,27 @@
 """(Re)build ``tests/fixtures/chunks.jsonl`` — the retrieval fixtures used by the
 answer-layer tests and ``scripts/eval_answers.py``.
 
-Two modes:
+Real PDFs (``data/raw/*.pdf``, file name → program: AIT.pdf→AIT, DSBA.pdf→DSBA,
+IT_inter2565.pdf→BIT, IT2565.pdf→IT):
 
-* **Real PDFs** — if ``data/raw/*.pdf`` exist, pages are extracted with pymupdf
-  and passages that match the topic patterns below are written with their real
-  page numbers.  The file name must contain a program id or alias (``AIT``,
-  ``DSBA``, ``BIT``/``inter``, ``IT``) so the chunk can be assigned a program.
-  Review the output by hand: the passage selection is heuristic.
-* **Synthetic** — otherwise a hand-written set of 28 plausible passages is
-  emitted with ``"synthetic": true`` on every line.  Numbers in it are made up
-  and internally consistent; they are NOT the official figures.
+1. text is extracted with pymupdf and the TH Sarabun PSK private-use-area
+   codepoints are repaired into real Thai vowels/tone marks
+   (``scripts/pdf_thai.py``; tables in ``tests/fixtures/pua_maps.json``);
+2. page headers/footers are stripped and numbered headings tracked into
+   ``heading_path`` (``หมวดที่3 … > 3.1 โครงสร้างหลักสูตร… > 3.1.1 …``);
+3. blocks are split at headings / paragraph gaps and capped at
+   ``MAX_CHARS`` (700) on line boundaries;
+4. a keyword pass keeps the blocks that carry the fact types the eval needs
+   (``FACT_PATTERNS``) plus the first course descriptions of the year-1 plan.
+   Every chunk records ``facts`` (which fact types matched) and ``source``.
+
+Without PDFs the synthetic set is written (``"synthetic": true``).
 
 Usage::
 
     python scripts/build_fixtures.py            # auto: PDFs if present, else synthetic
     python scripts/build_fixtures.py --synthetic
-    python scripts/build_fixtures.py --pdf-dir data/raw --out tests/fixtures/chunks.jsonl
+    python scripts/build_fixtures.py --dump-pages AIT.pdf 2 4   # print repaired page text
 """
 
 from __future__ import annotations
@@ -29,354 +34,272 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
 DEFAULT_OUT = ROOT / "tests" / "fixtures" / "chunks.jsonl"
 DEFAULT_PDF_DIR = ROOT / "data" / "raw"
+PUA_MAP_FILE = ROOT / "tests" / "fixtures" / "pua_maps.json"
+MAX_CHARS = 700
+PER_FACT_LIMIT = 3  # blocks kept per fact type per program
+
+PDF_PROGRAM = {"AIT.pdf": "AIT", "DSBA.pdf": "DSBA", "IT_inter2565.pdf": "BIT", "IT2565.pdf": "IT"}
 
 # --------------------------------------------------------------------------- #
-# Synthetic passages.  Facts are invented but consistent within each program.
-# (chunk_id, program, page, heading_path, text)
+# Fact types to cover per program.  (name, regex over heading + text)
 # --------------------------------------------------------------------------- #
-SYNTHETIC: list[tuple[str, str, int, str, str]] = [
-    # ---------------------------------------------------------------- AIT ----
-    (
-        "AIT-p3-c1", "AIT", 3, "หมวดที่ 1 ข้อมูลทั่วไป > ข้อมูลทั่วไปของหลักสูตร",
-        """
-        ชื่อหลักสูตร: หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีปัญญาประดิษฐ์ (หลักสูตรใหม่ พ.ศ. 2566)
-        ชื่อภาษาอังกฤษ: Bachelor of Science Program in Artificial Intelligence Technology
-        ชื่อปริญญา: วิทยาศาสตรบัณฑิต (เทคโนโลยีปัญญาประดิษฐ์) ชื่อย่อ วท.บ. (เทคโนโลยีปัญญาประดิษฐ์)
-        สังกัดคณะเทคโนโลยีสารสนเทศ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง
-        กำหนดเปิดสอนในภาคการศึกษาที่ 1 ปีการศึกษา 2566 เป็นต้นไป จัดการเรียนการสอนเป็นภาษาไทยและภาษาอังกฤษ
-        """,
-    ),
-    (
-        "AIT-p5-c1", "AIT", 5, "หมวดที่ 1 ข้อมูลทั่วไป > อาชีพที่สามารถประกอบได้หลังสำเร็จการศึกษา",
-        """
-        อาชีพที่สามารถประกอบได้หลังสำเร็จการศึกษา: วิศวกรปัญญาประดิษฐ์ (AI Engineer) วิศวกรการเรียนรู้ของเครื่อง (Machine Learning Engineer)
-        นักวิทยาศาสตร์ข้อมูล (Data Scientist) นักพัฒนาซอฟต์แวร์ด้านปัญญาประดิษฐ์ นักวิจัยด้านปัญญาประดิษฐ์
-        ผู้ประกอบการด้านเทคโนโลยีปัญญาประดิษฐ์ และนักวิเคราะห์ระบบอัจฉริยะ
-        หลักสูตรเน้นการเรียนรู้ของเครื่อง การเรียนรู้เชิงลึก การประมวลผลภาษาธรรมชาติ และคอมพิวเตอร์วิทัศน์ ควบคู่กับจริยธรรมปัญญาประดิษฐ์
-        """,
-    ),
-    (
-        "AIT-p8-c1", "AIT", 8, "หมวดที่ 3 ระบบการจัดการศึกษา > คุณสมบัติของผู้เข้าศึกษา",
-        """
-        คุณสมบัติของผู้เข้าศึกษา: สำเร็จการศึกษาระดับมัธยมศึกษาตอนปลาย (ม.6) หรือเทียบเท่า
-        แผนการเรียนวิทยาศาสตร์-คณิตศาสตร์ หรือมีหน่วยกิตกลุ่มสาระคณิตศาสตร์ไม่น้อยกว่า 12 หน่วยกิต
-        มีผลการเรียนเฉลี่ยสะสม (GPAX) ไม่ต่ำกว่า 2.50
-        รับสมัครผ่านระบบ TCAS รอบที่ 1 Portfolio รอบที่ 2 โควตา และรอบที่ 3 Admission
-        ผู้สมัครรอบ Portfolio ควรมีผลงานด้านการเขียนโปรแกรมหรือโครงงานด้านปัญญาประดิษฐ์ประกอบการพิจารณา
-        """,
-    ),
-    (
-        "AIT-p9-c1", "AIT", 9, "หมวดที่ 3 ระบบการจัดการศึกษา > ค่าธรรมเนียมการศึกษา",
-        """
-        ค่าธรรมเนียมการศึกษา: เก็บแบบเหมาจ่าย ภาคการศึกษาละ 32,000 บาท
-        ประมาณการค่าธรรมเนียมตลอดหลักสูตร (8 ภาคการศึกษา) 256,000 บาท
-        ไม่รวมค่าธรรมเนียมภาคฤดูร้อนและค่าใช้จ่ายส่วนตัว
-        นักศึกษาสามารถขอทุนการศึกษาของคณะได้ตามประกาศของคณะเทคโนโลยีสารสนเทศในแต่ละปีการศึกษา
-        """,
-    ),
-    (
-        "AIT-p12-c1", "AIT", 12, "หมวดที่ 3 ระบบการจัดการศึกษา > โครงสร้างหลักสูตร > จำนวนหน่วยกิตรวมตลอดหลักสูตร",
-        """
-        จำนวนหน่วยกิตรวมตลอดหลักสูตร 120 หน่วยกิต ระยะเวลาการศึกษา 4 ปี (8 ภาคการศึกษาปกติ)
-        โครงสร้างหลักสูตร: หมวดวิชาศึกษาทั่วไป 24 หน่วยกิต หมวดวิชาเฉพาะ 90 หน่วยกิต
-        (กลุ่มวิชาแกน 30 หน่วยกิต กลุ่มวิชาเฉพาะด้าน 45 หน่วยกิต กลุ่มวิชาเลือก 15 หน่วยกิต)
-        หมวดวิชาเลือกเสรี 6 หน่วยกิต นักศึกษาต้องผ่านการฝึกงานหรือสหกิจศึกษาในชั้นปีที่ 4
-        """,
-    ),
-    (
-        "AIT-p20-c1", "AIT", 20, "หมวดที่ 3 ระบบการจัดการศึกษา > โครงสร้างหลักสูตร > แผนการศึกษา ชั้นปีที่ 1",
-        """
-        แผนการศึกษา ชั้นปีที่ 1 ภาคการศึกษาที่ 1: 06016401 พื้นฐานปัญญาประดิษฐ์ 3(3-0-6)
-        06016402 การเขียนโปรแกรมเชิงวัตถุสำหรับปัญญาประดิษฐ์ 3(2-2-5) 06016403 คณิตศาสตร์ดิสครีตและตรรกศาสตร์ 3(3-0-6)
-        06016404 พีชคณิตเชิงเส้นสำหรับปัญญาประดิษฐ์ 3(3-0-6) 90641001 ภาษาอังกฤษพื้นฐาน 1 3(3-0-6) 90595001 การคิดเชิงออกแบบ 3(3-0-6) รวม 18 หน่วยกิต
-        ภาคการศึกษาที่ 2: 06016405 โครงสร้างข้อมูลและขั้นตอนวิธี 3(2-2-5) 06016406 ความน่าจะเป็นและสถิติ 3(3-0-6)
-        06016407 การเรียนรู้ของเครื่องเบื้องต้น 3(2-2-5) 06016408 ระบบฐานข้อมูล 3(2-2-5) 90641002 ภาษาอังกฤษพื้นฐาน 2 3(3-0-6) 90595002 ทักษะชีวิตดิจิทัล 3(3-0-6) รวม 18 หน่วยกิต
-        """,
-    ),
-    (
-        "AIT-p45-c1", "AIT", 45, "หมวดที่ 3 ระบบการจัดการศึกษา > คำอธิบายรายวิชา",
-        """
-        06016401 พื้นฐานปัญญาประดิษฐ์ (Fundamentals of Artificial Intelligence) 3(3-0-6) วิชาบังคับก่อน: ไม่มี
-        ประวัติและแนวคิดของปัญญาประดิษฐ์ ตัวแทนอัจฉริยะ การค้นหาแบบไม่ใช้และใช้ฮิวริสติก การแทนความรู้และการให้เหตุผล
-        การเรียนรู้ของเครื่องเบื้องต้น การประยุกต์ปัญญาประดิษฐ์ในอุตสาหกรรม และจริยธรรมกับผลกระทบทางสังคมของปัญญาประดิษฐ์
-        """,
-    ),
-    # --------------------------------------------------------------- DSBA ----
-    (
-        "DSBA-p3-c1", "DSBA", 3, "หมวดที่ 1 ข้อมูลทั่วไป > ข้อมูลทั่วไปของหลักสูตร",
-        """
-        ชื่อหลักสูตร: หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการข้อมูลและการวิเคราะห์เชิงธุรกิจ (หลักสูตรปรับปรุง พ.ศ. 2565)
-        ชื่อภาษาอังกฤษ: Bachelor of Science Program in Data Science and Business Analytics
-        ชื่อปริญญา: วิทยาศาสตรบัณฑิต (วิทยาการข้อมูลและการวิเคราะห์เชิงธุรกิจ) ชื่อย่อ วท.บ. (วิทยาการข้อมูลและการวิเคราะห์เชิงธุรกิจ)
-        ปรับปรุงจากหลักสูตร พ.ศ. 2560 กำหนดเปิดสอนในภาคการศึกษาที่ 1 ปีการศึกษา 2565 เป็นต้นไป จัดการเรียนการสอนเป็นภาษาไทย
-        """,
-    ),
-    (
-        "DSBA-p4-c1", "DSBA", 4, "หมวดที่ 1 ข้อมูลทั่วไป > อาชีพที่สามารถประกอบได้หลังสำเร็จการศึกษา",
-        """
-        อาชีพที่สามารถประกอบได้หลังสำเร็จการศึกษา: นักวิทยาศาสตร์ข้อมูล (Data Scientist) นักวิเคราะห์ธุรกิจ (Business Analyst)
-        วิศวกรข้อมูล (Data Engineer) นักวิเคราะห์ข้อมูล (Data Analyst) ที่ปรึกษาด้านระบบธุรกิจอัจฉริยะ (Business Intelligence Consultant)
-        และผู้ประกอบการด้านข้อมูล หลักสูตรผสมผสานสถิติ การเขียนโปรแกรม และความรู้ทางธุรกิจ เพื่อให้วิเคราะห์ข้อมูลและนำเสนอผลต่อผู้บริหารได้
-        """,
-    ),
-    (
-        "DSBA-p7-c1", "DSBA", 7, "หมวดที่ 3 ระบบการจัดการศึกษา > คุณสมบัติของผู้เข้าศึกษา",
-        """
-        คุณสมบัติของผู้เข้าศึกษา: สำเร็จการศึกษาระดับมัธยมศึกษาตอนปลาย (ม.6) หรือเทียบเท่า
-        แผนการเรียนวิทยาศาสตร์-คณิตศาสตร์ หรือศิลป์-คำนวณ มีผลการเรียนเฉลี่ยสะสม (GPAX) ไม่ต่ำกว่า 2.75
-        รับสมัครผ่านระบบ TCAS รอบที่ 1 Portfolio รอบที่ 2 โควตา รอบที่ 3 Admission และรอบที่ 4 Direct Admission
-        ผู้สมัครรอบ Portfolio ควรมีผลงานด้านการวิเคราะห์ข้อมูล การเขียนโปรแกรม หรือการแข่งขันทางคณิตศาสตร์
-        """,
-    ),
-    (
-        "DSBA-p8-c1", "DSBA", 8, "หมวดที่ 3 ระบบการจัดการศึกษา > ค่าธรรมเนียมการศึกษา",
-        """
-        ค่าธรรมเนียมการศึกษา: เก็บแบบเหมาจ่าย ภาคการศึกษาละ 30,000 บาท
-        ประมาณการค่าธรรมเนียมตลอดหลักสูตร (8 ภาคการศึกษา) 240,000 บาท ไม่รวมค่าธรรมเนียมภาคฤดูร้อน
-        นักศึกษาที่มีผลการเรียนดีเด่นสามารถสมัครขอทุนเรียนดีของคณะได้ตามประกาศในแต่ละปีการศึกษา
-        """,
-    ),
-    (
-        "DSBA-p11-c1", "DSBA", 11, "หมวดที่ 3 ระบบการจัดการศึกษา > โครงสร้างหลักสูตร > จำนวนหน่วยกิตรวมตลอดหลักสูตร",
-        """
-        จำนวนหน่วยกิตรวมตลอดหลักสูตร 129 หน่วยกิต ระยะเวลาการศึกษา 4 ปี (8 ภาคการศึกษาปกติ)
-        โครงสร้างหลักสูตร: หมวดวิชาศึกษาทั่วไป 30 หน่วยกิต หมวดวิชาเฉพาะ 93 หน่วยกิต
-        (กลุ่มวิชาแกน 36 หน่วยกิต กลุ่มวิชาเฉพาะด้าน 45 หน่วยกิต กลุ่มวิชาเลือก 12 หน่วยกิต)
-        หมวดวิชาเลือกเสรี 6 หน่วยกิต นักศึกษาต้องผ่านสหกิจศึกษาในภาคการศึกษาที่ 2 ของชั้นปีที่ 4
-        """,
-    ),
-    (
-        "DSBA-p18-c1", "DSBA", 18, "หมวดที่ 3 ระบบการจัดการศึกษา > โครงสร้างหลักสูตร > แผนการศึกษา ชั้นปีที่ 1",
-        """
-        แผนการศึกษา ชั้นปีที่ 1 ภาคการศึกษาที่ 1: 06026101 พื้นฐานวิทยาการข้อมูล 3(3-0-6) 06026102 การเขียนโปรแกรมด้วยภาษาไพทอน 3(2-2-5)
-        06026103 สถิติสำหรับวิทยาการข้อมูล 3(3-0-6) 06026104 หลักการธุรกิจและเศรษฐศาสตร์เบื้องต้น 3(3-0-6)
-        90641001 ภาษาอังกฤษพื้นฐาน 1 3(3-0-6) 90595001 การคิดเชิงออกแบบ 3(3-0-6) รวม 18 หน่วยกิต
-        ภาคการศึกษาที่ 2: 06026105 โครงสร้างข้อมูลและขั้นตอนวิธี 3(2-2-5) 06026106 ระบบฐานข้อมูลและภาษาสอบถาม 3(2-2-5)
-        06026107 คณิตศาสตร์สำหรับวิทยาการข้อมูล 3(3-0-6) 06026108 การบัญชีเพื่อการวิเคราะห์ธุรกิจ 3(3-0-6)
-        90641002 ภาษาอังกฤษพื้นฐาน 2 3(3-0-6) 90595002 ทักษะชีวิตดิจิทัล 3(3-0-6) รวม 18 หน่วยกิต
-        """,
-    ),
-    (
-        "DSBA-p40-c1", "DSBA", 40, "หมวดที่ 3 ระบบการจัดการศึกษา > คำอธิบายรายวิชา",
-        """
-        06026101 พื้นฐานวิทยาการข้อมูล (Data Science Fundamentals) 3(3-0-6) วิชาบังคับก่อน: ไม่มี
-        ภาพรวมของวิทยาการข้อมูลและวงจรชีวิตของโครงการข้อมูล การเก็บรวบรวมและทำความสะอาดข้อมูล การสำรวจข้อมูลด้วยสถิติเชิงพรรณนา
-        การสร้างภาพข้อมูล การนำเสนอผลการวิเคราะห์ต่อผู้มีส่วนได้ส่วนเสีย และจริยธรรมกับความเป็นส่วนตัวของข้อมูล
-        """,
-    ),
-    # ---------------------------------------------------------------- BIT ----
-    (
-        "BIT-p3-c1", "BIT", 3, "หมวดที่ 1 ข้อมูลทั่วไป > ข้อมูลทั่วไปของหลักสูตร",
-        """
-        ชื่อหลักสูตร: หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศทางธุรกิจ (หลักสูตรนานาชาติ) (หลักสูตรปรับปรุง พ.ศ. 2565)
-        ชื่อภาษาอังกฤษ: Bachelor of Science Program in Business Information Technology (International Program)
-        ชื่อย่อ B.Sc. (Business Information Technology) จัดการเรียนการสอนเป็นภาษาอังกฤษทั้งหมด
-        ปรับปรุงจากหลักสูตร พ.ศ. 2560 กำหนดเปิดสอนในภาคการศึกษาที่ 1 ปีการศึกษา 2565 เป็นต้นไป
-        """,
-    ),
-    (
-        "BIT-p4-c1", "BIT", 4, "หมวดที่ 1 ข้อมูลทั่วไป > อาชีพที่สามารถประกอบได้หลังสำเร็จการศึกษา",
-        """
-        อาชีพที่สามารถประกอบได้หลังสำเร็จการศึกษา: นักวิเคราะห์ธุรกิจ (Business Analyst) ที่ปรึกษาด้านเทคโนโลยีสารสนเทศ (IT Consultant)
-        ผู้จัดการผลิตภัณฑ์ดิจิทัล (Product Manager) ผู้เชี่ยวชาญด้านการเปลี่ยนผ่านสู่ดิจิทัล (Digital Transformation Specialist)
-        และผู้ประกอบการธุรกิจดิจิทัล หลักสูตรเชื่อมโยงความรู้ด้านธุรกิจกับเทคโนโลยีสารสนเทศ และมีโครงการแลกเปลี่ยนกับมหาวิทยาลัยพันธมิตรในต่างประเทศ
-        """,
-    ),
-    (
-        "BIT-p7-c1", "BIT", 7, "หมวดที่ 3 ระบบการจัดการศึกษา > คุณสมบัติของผู้เข้าศึกษา",
-        """
-        คุณสมบัติของผู้เข้าศึกษา: สำเร็จการศึกษาระดับมัธยมศึกษาตอนปลาย (ม.6) หรือเทียบเท่า (เช่น IB, GED, A-Level)
-        มีผลการเรียนเฉลี่ยสะสม (GPAX) ไม่ต่ำกว่า 2.50 และมีผลการทดสอบภาษาอังกฤษอย่างใดอย่างหนึ่ง: IELTS ไม่ต่ำกว่า 5.5
-        หรือ TOEFL iBT ไม่ต่ำกว่า 61 หรือ KMITL-TEP ตามเกณฑ์ที่คณะกำหนด ผู้สมัครทุกคนต้องผ่านการสอบสัมภาษณ์เป็นภาษาอังกฤษ
-        รับสมัครผ่านระบบ TCAS และการรับตรงของหลักสูตรนานาชาติ
-        """,
-    ),
-    (
-        "BIT-p8-c1", "BIT", 8, "หมวดที่ 3 ระบบการจัดการศึกษา > ค่าธรรมเนียมการศึกษา",
-        """
-        ค่าธรรมเนียมการศึกษา: เก็บแบบเหมาจ่าย ภาคการศึกษาละ 90,000 บาท
-        ประมาณการค่าธรรมเนียมตลอดหลักสูตร (8 ภาคการศึกษา) 720,000 บาท ไม่รวมค่าใช้จ่ายในโครงการแลกเปลี่ยนต่างประเทศ
-        หลักสูตรมีทุนส่วนลดค่าธรรมเนียมสำหรับผู้มีผลการเรียนดีเด่นตามประกาศของคณะ
-        """,
-    ),
-    (
-        "BIT-p10-c1", "BIT", 10, "หมวดที่ 3 ระบบการจัดการศึกษา > โครงสร้างหลักสูตร > จำนวนหน่วยกิตรวมตลอดหลักสูตร",
-        """
-        จำนวนหน่วยกิตรวมตลอดหลักสูตร 126 หน่วยกิต ระยะเวลาการศึกษา 4 ปี (8 ภาคการศึกษาปกติ)
-        โครงสร้างหลักสูตร: หมวดวิชาศึกษาทั่วไป 30 หน่วยกิต หมวดวิชาเฉพาะ 90 หน่วยกิต
-        (กลุ่มวิชาแกน 33 หน่วยกิต กลุ่มวิชาเฉพาะด้าน 42 หน่วยกิต กลุ่มวิชาเลือก 15 หน่วยกิต)
-        หมวดวิชาเลือกเสรี 6 หน่วยกิต นักศึกษาสามารถเลือกไปแลกเปลี่ยนที่มหาวิทยาลัยพันธมิตรได้ 1 ภาคการศึกษาในชั้นปีที่ 3
-        """,
-    ),
-    (
-        "BIT-p17-c1", "BIT", 17, "หมวดที่ 3 ระบบการจัดการศึกษา > โครงสร้างหลักสูตร > แผนการศึกษา ชั้นปีที่ 1",
-        """
-        แผนการศึกษา ชั้นปีที่ 1 ภาคการศึกษาที่ 1: 06036101 Introduction to Business Information Technology 3(3-0-6)
-        06036102 Programming Fundamentals 3(2-2-5) 06036103 Principles of Management 3(3-0-6) 06036104 Business Mathematics 3(3-0-6)
-        90641011 Foundation English 3(3-0-6) 90595011 Design Thinking 3(3-0-6) รวม 18 หน่วยกิต
-        ภาคการศึกษาที่ 2: 06036105 Data Structures and Algorithms 3(2-2-5) 06036106 Database Systems 3(2-2-5)
-        06036107 Financial Accounting 3(3-0-6) 06036108 Business Statistics 3(3-0-6) 90641012 Academic English 3(3-0-6) 90595012 Digital Life Skills 3(3-0-6) รวม 18 หน่วยกิต
-        """,
-    ),
-    (
-        "BIT-p38-c1", "BIT", 38, "หมวดที่ 3 ระบบการจัดการศึกษา > คำอธิบายรายวิชา",
-        """
-        06036201 การจัดการกระบวนการทางธุรกิจ (Business Process Management) 3(3-0-6) วิชาบังคับก่อน: 06036101
-        แนวคิดของกระบวนการทางธุรกิจ การสร้างแบบจำลองกระบวนการด้วย BPMN การวิเคราะห์และปรับปรุงกระบวนการ
-        ระบบวางแผนทรัพยากรองค์กร (ERP) การทำงานอัตโนมัติด้วยซอฟต์แวร์ และกรณีศึกษาการเปลี่ยนผ่านสู่ดิจิทัลขององค์กร
-        """,
-    ),
-    # ----------------------------------------------------------------- IT ----
-    (
-        "IT-p3-c1", "IT", 3, "หมวดที่ 1 ข้อมูลทั่วไป > ข้อมูลทั่วไปของหลักสูตร",
-        """
-        ชื่อหลักสูตร: หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาเทคโนโลยีสารสนเทศ (หลักสูตรปรับปรุง พ.ศ. 2565)
-        ชื่อภาษาอังกฤษ: Bachelor of Science Program in Information Technology
-        ชื่อปริญญา: วิทยาศาสตรบัณฑิต (เทคโนโลยีสารสนเทศ) ชื่อย่อ วท.บ. (เทคโนโลยีสารสนเทศ)
-        ปรับปรุงจากหลักสูตร พ.ศ. 2560 กำหนดเปิดสอนในภาคการศึกษาที่ 1 ปีการศึกษา 2565 เป็นต้นไป จัดการเรียนการสอนเป็นภาษาไทย
-        """,
-    ),
-    (
-        "IT-p5-c1", "IT", 5, "หมวดที่ 1 ข้อมูลทั่วไป > แขนงวิชาและอาชีพที่สามารถประกอบได้",
-        """
-        หลักสูตรแบ่งเป็น 3 แขนงวิชา ซึ่งนักศึกษาเลือกในชั้นปีที่ 3: แขนงวิศวกรรมซอฟต์แวร์ (Software Engineering)
-        แขนงเทคโนโลยีเครือข่ายและระบบ (Network and System Technology) และแขนงเทคโนโลยีมัลติมีเดีย (Multimedia Technology)
-        อาชีพที่สามารถประกอบได้: นักพัฒนาซอฟต์แวร์ วิศวกรซอฟต์แวร์ ผู้ดูแลระบบเครือข่าย นักวิเคราะห์ระบบ
-        นักพัฒนาเว็บและแอปพลิเคชันมือถือ นักออกแบบประสบการณ์ผู้ใช้ และผู้ดูแลความมั่นคงปลอดภัยของระบบสารสนเทศ
-        """,
-    ),
-    (
-        "IT-p6-c1", "IT", 6, "หมวดที่ 3 ระบบการจัดการศึกษา > คุณสมบัติของผู้เข้าศึกษา",
-        """
-        คุณสมบัติของผู้เข้าศึกษา: สำเร็จการศึกษาระดับมัธยมศึกษาตอนปลาย (ม.6) หรือเทียบเท่า แผนการเรียนวิทยาศาสตร์-คณิตศาสตร์
-        มีผลการเรียนเฉลี่ยสะสม (GPAX) ไม่ต่ำกว่า 2.50 รับสมัครผ่านระบบ TCAS รอบที่ 1 Portfolio รอบที่ 2 โควตา และรอบที่ 3 Admission
-        ผู้สมัครรอบ Portfolio ควรมีผลงานด้านการเขียนโปรแกรม การพัฒนาเว็บหรือแอปพลิเคชัน หรือรางวัลจากการแข่งขันด้านคอมพิวเตอร์
-        """,
-    ),
-    (
-        "IT-p8-c1", "IT", 8, "หมวดที่ 3 ระบบการจัดการศึกษา > ค่าธรรมเนียมการศึกษา",
-        """
-        ค่าธรรมเนียมการศึกษา: เก็บแบบเหมาจ่าย ภาคการศึกษาละ 28,000 บาท
-        ประมาณการค่าธรรมเนียมตลอดหลักสูตร (8 ภาคการศึกษา) 224,000 บาท ไม่รวมค่าธรรมเนียมภาคฤดูร้อน
-        นักศึกษาสามารถขอทุนการศึกษาของคณะและของสถาบันได้ตามประกาศในแต่ละปีการศึกษา
-        """,
-    ),
-    (
-        "IT-p10-c1", "IT", 10, "หมวดที่ 3 ระบบการจัดการศึกษา > โครงสร้างหลักสูตร > จำนวนหน่วยกิตรวมตลอดหลักสูตร",
-        """
-        จำนวนหน่วยกิตรวมตลอดหลักสูตร 127 หน่วยกิต ระยะเวลาการศึกษา 4 ปี (8 ภาคการศึกษาปกติ)
-        โครงสร้างหลักสูตร: หมวดวิชาศึกษาทั่วไป 30 หน่วยกิต หมวดวิชาเฉพาะ 91 หน่วยกิต
-        (กลุ่มวิชาแกน 33 หน่วยกิต กลุ่มวิชาเฉพาะด้าน 43 หน่วยกิต กลุ่มวิชาเลือก 15 หน่วยกิต)
-        หมวดวิชาเลือกเสรี 6 หน่วยกิต นักศึกษาต้องผ่านการฝึกงานในภาคฤดูร้อนของชั้นปีที่ 3 หรือสหกิจศึกษาในชั้นปีที่ 4
-        """,
-    ),
-    (
-        "IT-p16-c1", "IT", 16, "หมวดที่ 3 ระบบการจัดการศึกษา > โครงสร้างหลักสูตร > แผนการศึกษา ชั้นปีที่ 1",
-        """
-        แผนการศึกษา ชั้นปีที่ 1 ภาคการศึกษาที่ 1: 06016301 การเขียนโปรแกรมคอมพิวเตอร์ 1 3(2-2-5) 06016302 พื้นฐานเทคโนโลยีสารสนเทศ 3(3-0-6)
-        06016303 คณิตศาสตร์ดิสครีต 3(3-0-6) 06016304 ระบบดิจิทัล 3(3-0-6) 90641001 ภาษาอังกฤษพื้นฐาน 1 3(3-0-6) 90595001 การคิดเชิงออกแบบ 3(3-0-6) รวม 18 หน่วยกิต
-        ภาคการศึกษาที่ 2: 06016305 การเขียนโปรแกรมคอมพิวเตอร์ 2 3(2-2-5) 06016306 โครงสร้างข้อมูลและขั้นตอนวิธี 3(2-2-5)
-        06016307 ระบบฐานข้อมูล 3(2-2-5) 06016308 สถิติสำหรับเทคโนโลยีสารสนเทศ 3(3-0-6) 90641002 ภาษาอังกฤษพื้นฐาน 2 3(3-0-6) 90595002 ทักษะชีวิตดิจิทัล 3(3-0-6) รวม 18 หน่วยกิต
-        """,
-    ),
-    (
-        "IT-p42-c1", "IT", 42, "หมวดที่ 3 ระบบการจัดการศึกษา > คำอธิบายรายวิชา",
-        """
-        06016317 วิศวกรรมซอฟต์แวร์ (Software Engineering) 3(3-0-6) วิชาบังคับก่อน: 06016301
-        กระบวนการพัฒนาซอฟต์แวร์ การเก็บและวิเคราะห์ความต้องการ การออกแบบสถาปัตยกรรมซอฟต์แวร์ การทดสอบและการประกันคุณภาพ
-        การจัดการโครงการซอฟต์แวร์ แนวทางอไจล์และสครัม การใช้เครื่องมือควบคุมเวอร์ชัน และการทำงานเป็นทีมในโครงงานซอฟต์แวร์
-        """,
-    ),
+FACT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("name_degree", re.compile(r"ชื่อปริญญาและสาขาวิชา|ชื่อเต็ม\s*\(ภาษาไทย\)|^1\.\s*ชื่อหลักสูตร", re.MULTILINE)),
+    ("curriculum_year", re.compile(r"หลักสูตร(ใหม่|ปรับปรุง)\s*พ\.?ศ\.?\s*25\d\d")),
+    ("credits_total", re.compile(r"จำนวนหน่วยกิต(ที่เรียน|รวม)ตลอดหลักสูตร")),
+    ("duration", re.compile(r"ระยะเวล?าการศึกษาของหลักสูตร|หลักสูตรปริญญาตรี\s*4\s*ปี")),
+    ("opening", re.compile(r"กำหนดเปิดสอน")),
+    ("careers", re.compile(r"อาชีพที่สามารถประกอบได้")),
+    ("admission", re.compile(r"คุณสมบัติของผู้เข้าศึกษา")),
+    ("structure", re.compile(r"โครงสร้างหลักสูตร\s*$|^3\.?1\.?2\s*โครงสร้างหลักสูตร|3\.3\.1\.2\s*โครงสร้างหลักสูตร", re.MULTILINE)),
+    ("plan_y1s1", re.compile(r"ปีที่\s*1\s*ภาคการศึกษาที่\s*1")),
+    ("plan_y1s2", re.compile(r"ปีที่\s*1\s*ภาคการศึกษาที่\s*2")),
+    ("fees", re.compile(r"ค่าธรรมเนียม|ค่าเล่าเรียน|ค่าใช้จ่ายต่อหัว|งบประมาณ")),
+    ("philosophy", re.compile(r"^1\.?\s*ปรัชญา|ปรัชญาของหลักสูตร|1\.1\s*ปรัชญา", re.MULTILINE)),
+    ("objectives", re.compile(r"วัตถุประสงค์ของหลักสูตร|1\.2\s*วัตถุประสงค์", re.MULTILINE)),
+    ("tracks", re.compile(r"กลุ่มวิชาสาขา|แขนงวิชา|วิชาเอกหรือความเชี่ยวชาญ")),
+    ("internship", re.compile(r"สหกิจศึกษา|ฝึกงาน")),
+    ("language_of_instruction", re.compile(r"ภาษาที่ใช้")),
+    ("admission_plan", re.compile(r"แผนการรับนักศึกษา|จำนวนนักศึกษาที่จะรับ|จำนวนรับ")),
 ]
+COURSE_DESC_HEADING = re.compile(r"คำอธิบายรายวิชา")
+COURSE_CODE_LINE = re.compile(r"^\s*(\d{8})\s*$", re.MULTILINE)
+COURSE_DESC_START = re.compile(r"^\s*(\d{8})\s+\S", re.MULTILINE)
 
-# Passage selection for real PDFs: (topic, regex).  A passage is kept when it
-# matches at least one topic; the topic is only used for reporting.
-TOPIC_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("credits", re.compile(r"หน่วยกิตรวมตลอดหลักสูตร|จำนวนหน่วยกิตรวม")),
-    ("opening", re.compile(r"กำหนดเปิดสอน|เปิดสอนใน")),
-    ("plan_y1", re.compile(r"แผนการศึกษา.{0,40}ชั้นปีที่ ?1|ปีที่ 1.{0,20}ภาคการศึกษาที่ 1")),
-    ("admission", re.compile(r"คุณสมบัติของผู้เข้าศึกษา|คุณสมบัติผู้เข้าศึกษา")),
-    ("course_desc", re.compile(r"คำอธิบายรายวิชา|\b\d{8}\b.{0,80}\d\(\d-\d-\d\)")),
-    ("fees", re.compile(r"ค่าธรรมเนียม|ค่าเล่าเรียน")),
-    ("careers", re.compile(r"อาชีพที่สามารถประกอบ")),
-]
-_PROGRAM_FILE_HINTS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"ait|ปัญญาประดิษฐ์|artificial", re.IGNORECASE), "AIT"),
-    (re.compile(r"dsba|data|วิทยาการข้อมูล", re.IGNORECASE), "DSBA"),
-    (re.compile(r"bit|inter|นานาชาติ|business", re.IGNORECASE), "BIT"),
-    (re.compile(r"(^|[^a-z])it([^a-z]|$)|เทคโนโลยีสารสนเทศ", re.IGNORECASE), "IT"),
-]
+HEADER_PATTERNS = (
+    re.compile(r"^\s*\d{1,3}\s*$"),  # page number
+    re.compile(r"^\s*(รายละเอียดหลักสูตร|มคอ\.?\s*2)\s*$"),
+    re.compile(r"^\s*วท\.บ\.?\s*\("),  # running footer, line 1 ("วท.บ.(สาขาวิชา…) คณะ…")
+    re.compile(r"^\s*คณะเทคโนโลยีสารสนเทศ\s*สจล\.?\s*$"),  # running footer, line 2 (DSBA wraps it)
+)
+TOC_LINE = re.compile(r"\.{6,}\s*\d+\s*$", re.MULTILINE)
+TOP_HEADING = re.compile(r"^\s*หมวดที่\s*\d+\s*\S")
+NUM_HEADING = re.compile(r"^\s*(\d+\.(?:\d+\.?){0,3})\s*([^\W\d(].*)$")  # "8. อาชีพ…", "2.2 คุณสมบัติ…", not "3 (3-0-6)"
+DOTTED_LEADER = re.compile(r"\.{6,}")
 
 
-def program_for_file(name: str) -> str | None:
-    for pat, pid in _PROGRAM_FILE_HINTS:
-        if pat.search(name):
-            return pid
+def clean_lines(text: str) -> list[str]:
+    out: list[str] = []
+    for raw in text.split("\n"):
+        line = re.sub(r"[ \t ]+", " ", raw).strip()
+        if not line:
+            out.append("")
+            continue
+        if any(p.match(line) for p in HEADER_PATTERNS):
+            continue
+        out.append(line)
+    return out
+
+
+def heading_level(line: str) -> tuple[int, str] | None:
+    if TOP_HEADING.match(line):
+        return 0, line
+    m = NUM_HEADING.match(line)
+    if m and len(m.group(2)) <= 90:
+        depth = m.group(1).rstrip(".").count(".") + 1
+        if depth <= 3 and not re.search(r"หน่วยกิต\s*$", line) and not DOTTED_LEADER.search(line):
+            return depth, line
     return None
 
 
+def split_block(lines: list[str]) -> list[list[str]]:
+    """Split a long block on line boundaries so each part stays under MAX_CHARS."""
+    parts: list[list[str]] = []
+    cur: list[str] = []
+    size = 0
+    for ln in lines:
+        if cur and size + len(ln) + 1 > MAX_CHARS:
+            parts.append(cur)
+            cur, size = [], 0
+        cur.append(ln)
+        size += len(ln) + 1
+    if cur:
+        parts.append(cur)
+    return parts
+
+
+def page_blocks(page_no: int, lines: list[str], path: list[str]) -> list[dict]:
+    """Group lines into heading-delimited blocks; ``path`` (mutable) carries headings across pages."""
+    blocks: list[dict] = []
+    cur: list[str] = []
+    blank_run = 0
+
+    def flush() -> None:
+        nonlocal cur
+        text_lines = [ln for ln in cur if ln]
+        if text_lines:
+            for i, part in enumerate(split_block(text_lines)):
+                blocks.append({"page": page_no, "heading_path": " > ".join(p for p in path if p), "lines": part, "part": i})
+        cur = []
+
+    for ln in lines:
+        if not ln:
+            blank_run += 1
+            if blank_run >= 2:
+                flush()
+            continue
+        blank_run = 0
+        hl = heading_level(ln)
+        if hl is not None:
+            if any(heading_level(x) is None for x in cur if x):
+                flush()  # a heading starts a new block — unless the block so far is only headings
+            depth, title = hl
+            del path[depth:]
+            path.extend([""] * (depth - len(path)))
+            path.append(title[:80])
+        cur.append(ln)
+    flush()
+    return blocks
+
+
+def extract_blocks(doc, pua_map: dict[str, str]) -> list[dict]:
+    from pdf_thai import page_text
+
+    path: list[str] = []
+    blocks: list[dict] = []
+    for i in range(doc.page_count):
+        lines = clean_lines(page_text(doc[i], pua_map))
+        blocks.extend(page_blocks(i + 1, lines, path))
+    for b in blocks:
+        b["text"] = "\n".join(b["lines"])
+    return blocks
+
+
+def _is_toc(b: dict) -> bool:
+    """Table-of-contents blocks: several lines ending in dotted leaders + page numbers."""
+    return len(TOC_LINE.findall(b["text"])) >= 3
+
+
+def select_blocks(blocks: list[dict]) -> list[dict]:
+    """Keyword pass: keep blocks carrying the fact types + first year-1 course descriptions."""
+    chosen: dict[int, dict] = {}
+    fact_hits: dict[str, int] = {}
+    for idx, b in enumerate(blocks):
+        if _is_toc(b) or len(b["text"]) < 20:
+            continue
+        hay = b["heading_path"] + "\n" + b["text"]
+        facts = [name for name, pat in FACT_PATTERNS if pat.search(hay)]
+        keep = [f for f in facts if fact_hits.get(f, 0) < PER_FACT_LIMIT]
+        if not keep:
+            continue
+        for f in keep:
+            fact_hits[f] = fact_hits.get(f, 0) + 1
+        chosen[idx] = {**b, "facts": facts}
+    return [chosen[i] for i in sorted(chosen)]
+
+
+COURSE_ENTRY_START = re.compile(r"^\s*(\d{8})(\s+\S.*)?$")
+PREREQ = re.compile(r"วิชาบังคับก่อน|PREREQUISITE", re.IGNORECASE)
+
+
+def course_descriptions(doc, pua_map: dict[str, str], wanted_codes: set[str], *, limit: int = 4) -> list[dict]:
+    """Course-description entries from the appendix (``คำอธิบายรายวิชา``), one chunk per course.
+
+    An entry starts at a line holding the 8-digit code (alone, or followed by
+    the Thai name) and runs to the next code line; only entries with a
+    prerequisite line are real descriptions (study-plan tables also list codes).
+    Year-1 courses are preferred; entries are truncated to MAX_CHARS.
+    """
+    from pdf_thai import page_text
+
+    start_page = None
+    for i in range(doc.page_count // 2, doc.page_count):
+        if "คำอธิบายรายวิชา" in page_text(doc[i], pua_map):
+            start_page = i
+            break
+    if start_page is None:
+        return []
+    entries: list[dict] = []
+    for i in range(start_page, doc.page_count):
+        lines = clean_lines(page_text(doc[i], pua_map))
+        cur: list[str] | None = None
+        code = ""
+        for ln in lines:
+            m = COURSE_ENTRY_START.match(ln)
+            if m:
+                if cur:
+                    entries.append({"page": i + 1, "code": code, "lines": cur})
+                cur, code = [ln], m.group(1)
+            elif cur is not None and ln:
+                cur.append(ln)
+        if cur:
+            entries.append({"page": i + 1, "code": code, "lines": cur})
+    real = [e for e in entries if PREREQ.search("\n".join(e["lines"]))]
+    preferred = [e for e in real if e["code"] in wanted_codes]
+    out: list[dict] = []
+    seen: set[str] = set()
+    for e in preferred + real:
+        if e["code"] in seen or len(out) >= limit:
+            continue
+        seen.add(e["code"])
+        text = "\n".join(e["lines"])[:MAX_CHARS]
+        out.append({"page": e["page"], "heading_path": "ภาคผนวก > คำอธิบายรายวิชา", "text": text, "facts": ["course_desc"], "lines": e["lines"]})
+    return out
+
+
+def _year1_codes(picked: list[dict]) -> set[str]:
+    codes: set[str] = set()
+    for b in picked:
+        if any(f.startswith("plan_y1") for f in b["facts"]):
+            codes.update(COURSE_CODE_LINE.findall(b["text"]))
+            codes.update(re.findall(r"^\s*(\d{8})\s", b["text"], re.MULTILINE))
+    return codes
+
+
+
+
+def pdf_rows(pdf_dir: Path) -> list[dict]:
+    import pymupdf
+    from pdf_thai import derive_pua_map, load_pua_maps, save_pua_maps
+
+    maps = load_pua_maps()
+    tables: dict = json.loads(PUA_MAP_FILE.read_text(encoding="utf-8")) if PUA_MAP_FILE.exists() else {}
+    rows: list[dict] = []
+    for pdf in sorted(pdf_dir.glob("*.pdf")):
+        prog = PDF_PROGRAM.get(pdf.name)
+        if prog is None:
+            print(f"! {pdf.name}: not in PDF_PROGRAM — skipped", file=sys.stderr)
+            continue
+        doc = pymupdf.open(pdf)
+        if pdf.name not in maps:
+            print(f"deriving PUA table for {pdf.name} …", file=sys.stderr)
+            tables[pdf.name] = derive_pua_map(doc)
+            save_pua_maps(tables)
+            maps = load_pua_maps()
+        blocks = extract_blocks(doc, maps[pdf.name])
+        picked = select_blocks(blocks)
+        picked += course_descriptions(doc, maps[pdf.name], _year1_codes(picked))
+        picked.sort(key=lambda b: b["page"])
+        counter: dict[int, int] = {}
+        for b in picked:
+            counter[b["page"]] = counter.get(b["page"], 0) + 1
+            rows.append({
+                "chunk_id": f"{prog}-p{b['page']}-c{counter[b['page']]}",
+                "program": prog,
+                "page": b["page"],
+                "heading_path": b["heading_path"] or "(ไม่มีหัวข้อ)",
+                "text": b["text"],
+                "score": 0.0,
+                "synthetic": False,
+                "facts": b["facts"],
+                "source": pdf.name,
+            })
+        covered = sorted({f for b in picked for f in b["facts"]})
+        missing = [name for name, _ in FACT_PATTERNS if name not in covered]
+        print(f"{pdf.name}: {prog} — {len(picked)} chunks from {len(blocks)} blocks; missing fact types: {missing}", file=sys.stderr)
+    return rows
+
+
 def synthetic_rows() -> list[dict]:
+    from synthetic_fixtures import SYNTHETIC
+
     return [
         {"chunk_id": cid, "program": prog, "page": page, "heading_path": heading, "text": " ".join(text.split()), "score": 0.0, "synthetic": True}
         for cid, prog, page, heading, text in SYNTHETIC
     ]
-
-
-def _split_passages(page_text: str, max_len: int = 700) -> list[str]:
-    """Split a page into paragraph-ish passages of at most ``max_len`` chars."""
-    paras = [re.sub(r"\s+", " ", p).strip() for p in re.split(r"\n\s*\n|\n(?=\S{0,3}\d+\.\d*)", page_text)]
-    out: list[str] = []
-    buf = ""
-    for p in paras:
-        if not p:
-            continue
-        if buf and len(buf) + len(p) + 1 > max_len:
-            out.append(buf)
-            buf = p
-        else:
-            buf = f"{buf} {p}".strip()
-    if buf:
-        out.append(buf)
-    return out
-
-
-def pdf_rows(pdf_dir: Path, per_program: int = 7) -> list[dict]:
-    import pymupdf  # lazy: only needed for the real-PDF path
-
-    rows: list[dict] = []
-    for pdf in sorted(pdf_dir.glob("*.pdf")):
-        prog = program_for_file(pdf.stem)
-        if prog is None:
-            print(f"! {pdf.name}: cannot infer program from file name — skipped", file=sys.stderr)
-            continue
-        doc = pymupdf.open(pdf)
-        picked: list[dict] = []
-        seen_topics: set[str] = set()
-        current_heading = ""
-        for page_no in range(1, doc.page_count + 1):
-            text = doc[page_no - 1].get_text("text")
-            m = re.search(r"หมวดที่ \d+[^\n]*", text)
-            if m:
-                current_heading = m.group(0).strip()
-            for i, passage in enumerate(_split_passages(text), start=1):
-                topics = [t for t, pat in TOPIC_PATTERNS if pat.search(passage)]
-                if not topics:
-                    continue
-                # prefer passages that add a topic not yet covered for this program
-                new = [t for t in topics if t not in seen_topics]
-                if not new and len(picked) >= per_program:
-                    continue
-                seen_topics.update(topics)
-                picked.append({
-                    "chunk_id": f"{prog}-p{page_no}-c{i}", "program": prog, "page": page_no,
-                    "heading_path": current_heading or topics[0], "text": passage, "score": 0.0,
-                    "synthetic": False, "topics": topics, "source": pdf.name,
-                })
-        print(f"{pdf.name}: {prog} — {len(picked)} passages, topics={sorted(seen_topics)}", file=sys.stderr)
-        rows.extend(picked[: max(per_program, len(seen_topics))])
-    return rows
 
 
 def main() -> int:
@@ -384,7 +307,20 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--pdf-dir", type=Path, default=DEFAULT_PDF_DIR)
     ap.add_argument("--synthetic", action="store_true", help="force the synthetic set even if PDFs exist")
+    ap.add_argument("--dump-pages", nargs="+", metavar="ARG", help="PDF name followed by page numbers: print repaired text and exit")
     args = ap.parse_args()
+
+    if args.dump_pages:
+        import pymupdf
+        from pdf_thai import load_pua_maps, page_text
+
+        name, *pages = args.dump_pages
+        doc = pymupdf.open(args.pdf_dir / name)
+        pua = load_pua_maps().get(name, {})
+        for pg in pages:
+            print(f"######## {name} page {pg}")
+            print("\n".join(clean_lines(page_text(doc[int(pg) - 1], pua))))
+        return 0
 
     use_pdf = not args.synthetic and args.pdf_dir.is_dir() and any(args.pdf_dir.glob("*.pdf"))
     rows = pdf_rows(args.pdf_dir) if use_pdf else synthetic_rows()
@@ -395,8 +331,7 @@ def main() -> int:
     with args.out.open("w", encoding="utf-8") as fh:
         for row in rows:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-    kind = "real PDF" if use_pdf else "SYNTHETIC"
-    print(f"wrote {len(rows)} {kind} chunks to {args.out}")
+    print(f"wrote {len(rows)} {'real PDF' if use_pdf else 'SYNTHETIC'} chunks to {args.out}")
     return 0
 
 

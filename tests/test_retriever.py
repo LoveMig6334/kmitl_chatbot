@@ -8,7 +8,7 @@ from collections import Counter
 import pytest
 
 from rag.retriever import (
-    DEFAULT_FIXTURE_PATH,
+    SYNTHETIC_FIXTURE_PATH,
     Chunk,
     FixtureRetriever,
     Retriever,
@@ -24,11 +24,12 @@ def run(coro):
 
 @pytest.fixture(scope="module")
 def retriever() -> FixtureRetriever:
-    return FixtureRetriever(DEFAULT_FIXTURE_PATH)
+    return FixtureRetriever(SYNTHETIC_FIXTURE_PATH)
 
 
 def test_fixture_file_is_well_formed():
-    chunks = load_chunks(DEFAULT_FIXTURE_PATH)
+    """The synthetic set used by the unit tests."""
+    chunks = load_chunks(SYNTHETIC_FIXTURE_PATH)
     assert 20 <= len(chunks) <= 40
     assert len({c.chunk_id for c in chunks}) == len(chunks), "chunk_ids must be unique"
     per_program = Counter(c.program for c in chunks)
@@ -39,7 +40,7 @@ def test_fixture_file_is_well_formed():
 
 
 def test_fixture_covers_required_topics():
-    text = " ".join(c.text for c in load_chunks(DEFAULT_FIXTURE_PATH))
+    text = " ".join(c.text for c in load_chunks(SYNTHETIC_FIXTURE_PATH))
     for needle in ("หน่วยกิตรวมตลอดหลักสูตร", "กำหนดเปิดสอน", "แผนการศึกษา ชั้นปีที่ 1", "คุณสมบัติของผู้เข้าศึกษา", "วิชาบังคับก่อน", "ค่าธรรมเนียม"):
         assert needle in text
 

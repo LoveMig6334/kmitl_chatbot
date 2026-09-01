@@ -13,7 +13,7 @@ from gatekeeper.schema import GateDecision
 from rag.answerer import RagAnswerer, interleave, needs_rewrite
 from rag.llm import PATHUMMA_THINK, RagSettings
 from rag.prompts import NOT_FOUND_PHRASES, SYSTEM_PROMPT
-from rag.retriever import Chunk, FixtureRetriever
+from rag.retriever import SYNTHETIC_FIXTURE_PATH, Chunk, FixtureRetriever
 
 SETTINGS = RagSettings(
     api_key="test", timeout_s=0.5, first_token_timeout_s=0.3, query_rewrite=True, min_score=0.3,
@@ -76,7 +76,7 @@ def fake(monkeypatch):
 
 @pytest.fixture(scope="module")
 def retriever():
-    return FixtureRetriever()
+    return FixtureRetriever(SYNTHETIC_FIXTURE_PATH)
 
 
 def test_is_answerer(retriever):
