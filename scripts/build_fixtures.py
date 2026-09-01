@@ -69,8 +69,8 @@ COURSE_DESC_HEADING = re.compile(r"คำอธิบายรายวิชา
 COURSE_CODE_LINE = re.compile(r"^\s*(\d{8})\s*$", re.MULTILINE)
 COURSE_DESC_START = re.compile(r"^\s*(\d{8})\s+\S", re.MULTILINE)
 
+PAGE_NUMBER = re.compile(r"^\s*\d{1,3}\s*$")  # only stripped at the very top/bottom of a page (tables hold bare numbers too)
 HEADER_PATTERNS = (
-    re.compile(r"^\s*\d{1,3}\s*$"),  # page number
     re.compile(r"^\s*(รายละเอียดหลักสูตร|มคอ\.?\s*2)\s*$"),
     re.compile(r"^\s*วท\.บ\.?\s*\("),  # running footer, line 1 ("วท.บ.(สาขาวิชา…) คณะ…")
     re.compile(r"^\s*คณะเทคโนโลยีสารสนเทศ\s*สจล\.?\s*$"),  # running footer, line 2 (DSBA wraps it)
@@ -91,6 +91,15 @@ def clean_lines(text: str) -> list[str]:
         if any(p.match(line) for p in HEADER_PATTERNS):
             continue
         out.append(line)
+    # page number: a bare number among the first two non-empty lines (all four PDFs number pages at the top)
+    nonempty = [i for i, ln in enumerate(out) if ln]
+    for i in nonempty[:2]:
+        if PAGE_NUMBER.match(out[i]):
+            out[i] = ""
+    while out and not out[0]:
+        out.pop(0)
+    while out and not out[-1]:
+        out.pop()
     return out
 
 
@@ -149,6 +158,14 @@ def page_blocks(page_no: int, lines: list[str], path: list[str]) -> list[dict]:
             depth, title = hl
             del path[depth:]
             path.extend([""] * (depth - len(path)))
+            # "3.2.7 …" belongs under "3.2 …"/"3. …": blank stale intermediate headings from another section
+            number = title.split()[0].rstrip(".") if depth else ""
+            for level in range(1, depth):
+                parent = path[level]
+                parent_number = parent.split()[0].rstrip(".") if parent else ""
+                expected = ".".join(number.split(".")[:level])
+                if parent_number != expected:
+                    path[level] = ""
             path.append(title[:80])
         cur.append(ln)
     flush()
@@ -251,6 +268,18 @@ def _year1_codes(picked: list[dict]) -> set[str]:
 
 
 
+def _dropped_pua(doc, table: dict) -> dict[str, int]:
+    """Occurrences of PUA codes that the table maps to '' (lost vowels/tone marks), whole document."""
+    from pdf_thai import pua_stats, raw_page_text
+
+    counts: dict[str, int] = {}
+    for i in range(doc.page_count):
+        for code, n in pua_stats(raw_page_text(doc[i])).items():
+            if not table.get(code, {}).get("to"):
+                counts[hex(ord(code))] = counts.get(hex(ord(code)), 0) + n
+    return dict(sorted(counts.items(), key=lambda kv: -kv[1]))
+
+
 def pdf_rows(pdf_dir: Path) -> list[dict]:
     import pymupdf
     from pdf_thai import derive_pua_map, load_pua_maps, save_pua_maps
@@ -270,6 +299,9 @@ def pdf_rows(pdf_dir: Path) -> list[dict]:
             save_pua_maps(tables)
             maps = load_pua_maps()
         blocks = extract_blocks(doc, maps[pdf.name])
+        dropped = _dropped_pua(doc, tables.get(pdf.name, {}))
+        if dropped:
+            print(f"{pdf.name}: PUA codes dropped (unresolved): {dropped}", file=sys.stderr)
         picked = select_blocks(blocks)
         picked += course_descriptions(doc, maps[pdf.name], _year1_codes(picked))
         picked.sort(key=lambda b: b["page"])

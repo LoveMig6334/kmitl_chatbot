@@ -48,6 +48,8 @@ def test_score_prefers_long_dictionary_word():
 def test_clean_lines_strips_headers_and_footers():
     text = "3\nรายละเอียดหลักสูตร\n8. อาชีพ\nวท.บ.(สาขาวิชาเทคโนโลยีปัญญาประดิษฐ์) คณะเทคโนโลยีสารสนเทศสจล.\nมคอ. 2\nวท.บ(วิทยาการข้อมูล) สาขาวิชา\nคณะเทคโนโลยีสารสนเทศสจล.\n\nเนื้อหา  จริง"
     assert bf.clean_lines(text) == ["8. อาชีพ", "", "เนื้อหา จริง"]
+    # bare numbers inside a page are table cells, not page numbers
+    assert bf.clean_lines("12\nมคอ.2\nก. หมวดวิชาศึกษาทั่วไป\n24\nหน่วยกิต\nรวม\n15") == ["ก. หมวดวิชาศึกษาทั่วไป", "24", "หน่วยกิต", "รวม", "15"]
 
 
 @pytest.mark.parametrize(
