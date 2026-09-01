@@ -1,9 +1,9 @@
 """Public entry point: ``gate(message, scope_filter) -> GateDecision``.
 
 Routing, cheapest first:
-1. deterministic rules (0 API calls)
+1. deterministic rules (0 API calls) — only when near-certain
 2. one ThaiLLM classification call (retry once on timeout / bad JSON)
-3. fallback to ``in_scope`` with null metadata
+3. fallback to ``in_scope`` with empty metadata
 """
 
 from __future__ import annotations
@@ -24,21 +24,21 @@ log = logging.getLogger(__name__)
 
 
 def _university_info(text: str, verdict_name: str | None) -> tuple[str | None, str | None]:
+    thai = detect_language(text) == "th"
     found = find_other_universities(text)
     if found:
-        return found[0].name_th if detect_language(text) == "th" else found[0].name_en, found[0].admissions_url
+        return (found[0].name_th if thai else found[0].name_en), found[0].admissions_url
     if verdict_name:
         lowered = verdict_name.lower()
         for u in OTHER_UNIVERSITIES:
             if u.pattern.search(lowered):
-                return u.name_th if detect_language(text) == "th" else u.name_en, u.admissions_url
+                return (u.name_th if thai else u.name_en), u.admissions_url
         return verdict_name, None
     return None, None
 
 
 def _build_decision(
     *,
-    text: str,
     category: Category,
     language: Language,
     meta: Metadata,
@@ -49,19 +49,19 @@ def _build_decision(
     university_name: str | None = None,
     admissions_url: str | None = None,
     topic: str | None = None,
-    llm_faculty: str | None = None,
-    llm_program: str | None = None,
+    llm_programs: list[str] | None = None,
     llm_kind: str | None = None,
 ) -> GateDecision:
     in_scope = category == "in_scope"
-    faculty = meta.faculty or (llm_faculty if in_scope else None)
-    program = meta.program or (llm_program if in_scope else None)
-    kind = (meta.question_kind if meta.question_kind == "comparison" else None) or llm_kind or meta.question_kind
+    programs = meta.programs or list(llm_programs or [])
+    if len(programs) > 1:
+        kind: str | None = "comparison"
+    else:
+        kind = llm_kind or meta.question_kind
     return GateDecision(
         category=category,
         language=language,
-        faculty=faculty if in_scope else None,
-        program=program if in_scope else None,
+        programs=programs if in_scope else [],  # type: ignore[arg-type]
         course_codes=meta.course_codes if in_scope else [],
         question_kind=kind if in_scope else None,  # type: ignore[arg-type]
         direct_reply=build_reply(
@@ -85,7 +85,7 @@ async def _classify_with_retry(message: str, settings: Settings) -> tuple[LLMVer
             log.warning("gatekeeper llm timeout (attempt %d): %s", attempt, exc)
             raws.append(f"<timeout: {exc!r}>")
             continue
-        except Exception as exc:  # network / API errors
+        except Exception as exc:  # noqa: BLE001 - any network/API failure must fall through to the fallback
             log.warning("gatekeeper llm error (attempt %d): %s", attempt, exc)
             raws.append(f"<error: {exc!r}>")
             continue
@@ -104,12 +104,16 @@ async def gate(
     *,
     settings: Settings | None = None,
     use_llm: bool = True,
+    use_rules: bool = True,
     debug: dict | None = None,
 ) -> GateDecision:
     """Classify ``message`` and decide whether RAG should handle it.
 
-    ``scope_filter`` narrows faculty resolution (never causes a refusal).
-    ``use_llm=False`` runs the rule layer only (used by ``--dry-run`` evals).
+    ``scope_filter`` = program ids ticked in the UI; narrows program resolution
+    and never causes a refusal.
+    ``use_llm=False`` runs the rule layer only (``--dry-run`` evals);
+    ``use_rules=False`` skips rule *decisions* so every message hits the LLM
+    (``--no-rules`` evals — the system's floor).  Metadata extraction always runs.
     ``debug`` (optional dict) receives ``rule_reason`` and ``raw_outputs`` for eval tooling.
     """
     started = time.perf_counter()
@@ -121,13 +125,13 @@ async def gate(
         debug["rule_reason"] = rule.reason
         debug["raw_outputs"] = []
 
-    if rule.category is not None:
+    if use_rules and rule.category is not None:
         uni_name, uni_url = (None, None)
         if rule.university is not None:
             uni_name = rule.university.name_th if language == "th" else rule.university.name_en
             uni_url = rule.university.admissions_url
         return _build_decision(
-            text=text, category=rule.category, language=language, meta=meta, confidence=rule.confidence,
+            category=rule.category, language=language, meta=meta, confidence=rule.confidence,
             decided_by="rule", model_used=None, started=started, university_name=uni_name,
             admissions_url=uni_url, topic=rule.topic,
         )
@@ -143,7 +147,7 @@ async def gate(
     if verdict is None:
         # Fallback: better to attempt an answer than to wrongly refuse.
         return _build_decision(
-            text=text, category="in_scope", language=language, meta=Metadata(course_codes=meta.course_codes),
+            category="in_scope", language=language, meta=Metadata(course_codes=meta.course_codes),
             confidence=0.0, decided_by="fallback", model_used=model_used, started=started,
         )
 
@@ -156,11 +160,10 @@ async def gate(
         uni_name, uni_url = _university_info(text, verdict.university)
     topic = rule.topic or verdict.topic
     return _build_decision(
-        text=text, category=category, language=language, meta=meta,
+        category=category, language=language, meta=meta,
         confidence=verdict.confidence if verdict.confidence is not None else 0.7,
         decided_by="llm", model_used=model_used, started=started, university_name=uni_name,
-        admissions_url=uni_url, topic=topic, llm_faculty=verdict.faculty, llm_program=verdict.program,
-        llm_kind=verdict.question_kind,
+        admissions_url=uni_url, topic=topic, llm_programs=verdict.programs, llm_kind=verdict.question_kind,
     )
 
 

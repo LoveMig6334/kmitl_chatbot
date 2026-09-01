@@ -3,14 +3,21 @@
 
 Examples::
 
-    python scripts/eval_gatekeeper.py                 # full run (LLM enabled)
+    python scripts/eval_gatekeeper.py                 # full run (rules + LLM, cached)
     python scripts/eval_gatekeeper.py --level easy    # only easy rows
     python scripts/eval_gatekeeper.py --dry-run       # rule layer only, 0 API calls
+    python scripts/eval_gatekeeper.py --no-rules      # LLM only: the floor when rules miss
+    python scripts/eval_gatekeeper.py --no-cache      # bypass .cache/eval/
     python scripts/eval_gatekeeper.py --model typhoon-s-thaillm-8b-instruct
 
-The CSV is tab-separated with columns ``question``, ``type``, ``level`` and an
-optional ``expected_category`` override.  ``type`` maps to a category via
-``TYPE_TO_CATEGORY`` below.  Append rows to add cases.
+CSV format (tab-separated): ``question``, ``type``, ``level`` plus optional
+``expected_category`` (overrides the type mapping), ``expected_programs``
+(``;``-separated ids, ``-`` = expect none) and ``expected_kind``.  Append rows
+to add cases.
+
+If ``tests/eval_blind.csv`` exists it is evaluated as well and reported in a
+separate block.  Its contents are never printed (only line numbers) — it is a
+human-written held-out set.
 """
 
 from __future__ import annotations
@@ -28,8 +35,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from gatekeeper import GateDecision, gate, load_settings
-from gatekeeper.schema import CATEGORIES
+from gatekeeper import GateDecision, gate, load_settings  # noqa: E402
+from gatekeeper.llm import CACHE_STATS  # noqa: E402
+from gatekeeper.schema import CATEGORIES  # noqa: E402
 
 TYPE_TO_CATEGORY = {
     "คำถามเกี่ยวกับคณะ": "in_scope",
@@ -40,6 +48,8 @@ TYPE_TO_CATEGORY = {
     "คำถามเจาะระบบ": "injection_or_abuse",
 }
 DEFAULT_CSV = ROOT / "tests" / "eval_questions.csv"
+BLIND_CSV = ROOT / "tests" / "eval_blind.csv"
+DEFAULT_CACHE_DIR = ROOT / ".cache" / "eval"
 
 
 def load_rows(path: Path, level: str | None) -> list[dict]:
@@ -52,25 +62,37 @@ def load_rows(path: Path, level: str | None) -> list[dict]:
                 continue
             expected = (row.get("expected_category") or "").strip() or TYPE_TO_CATEGORY.get((row.get("type") or "").strip())
             if expected not in CATEGORIES:
-                print(f"! line {i}: unknown type/expected_category {row.get('type')!r} — skipped", file=sys.stderr)
+                print(f"! {path.name} line {i}: unknown type/expected_category — skipped", file=sys.stderr)
                 continue
             lvl = (row.get("level") or "").strip() or "easy"
             if level and lvl != level:
                 continue
-            rows.append({"line": i, "question": q, "type": row.get("type", ""), "level": lvl, "expected": expected})
+            ep_raw = (row.get("expected_programs") or "").strip()
+            expected_programs: list[str] | None
+            if not ep_raw:
+                expected_programs = None
+            elif ep_raw == "-":
+                expected_programs = []
+            else:
+                expected_programs = [p.strip().upper() for p in ep_raw.split(";") if p.strip()]
+            rows.append({
+                "line": i, "question": q, "type": row.get("type", ""), "level": lvl, "expected": expected,
+                "expected_programs": expected_programs,
+                "expected_kind": (row.get("expected_kind") or "").strip() or None,
+            })
     return rows
 
 
-async def run_all(rows: list[dict], *, dry_run: bool, settings, concurrency: int) -> list[dict]:
+async def run_all(rows: list[dict], *, dry_run: bool, no_rules: bool, settings, concurrency: int) -> list[dict]:
     sem = asyncio.Semaphore(concurrency)
 
     async def one(row: dict) -> dict:
         dbg: dict = {}
         async with sem:
-            t0 = time.perf_counter()
-            decision: GateDecision = await gate(row["question"], settings=settings, use_llm=not dry_run, debug=dbg)
-            wall = (time.perf_counter() - t0) * 1000
-        return {**row, "decision": decision, "debug": dbg, "wall_ms": wall}
+            decision: GateDecision = await gate(
+                row["question"], settings=settings, use_llm=not dry_run, use_rules=not no_rules, debug=dbg
+            )
+        return {**row, "decision": decision, "debug": dbg}
 
     return await asyncio.gather(*(one(r) for r in rows))
 
@@ -83,10 +105,11 @@ def p95(values: list[float]) -> float:
     if not values:
         return 0.0
     s = sorted(values)
-    return s[min(len(s) - 1, int(round(0.95 * (len(s) - 1))))]
+    return s[min(len(s) - 1, round(0.95 * (len(s) - 1)))]
 
 
-def report(results: list[dict], *, show_all: bool) -> int:
+def report(results: list[dict], *, title: str, show_all: bool, opaque: bool) -> int:
+    """Print the summary; return the number of category misses."""
     total = len(results)
     correct = sum(r["decision"].category == r["expected"] for r in results)
     by_cat_total: Counter = Counter(r["expected"] for r in results)
@@ -99,7 +122,13 @@ def report(results: list[dict], *, show_all: bool) -> int:
     decided_by = Counter(r["decision"].decided_by for r in results)
     latencies = [r["decision"].latency_ms for r in results]
     llm_lat = [r["decision"].latency_ms for r in results if r["decision"].decided_by != "rule"]
+    prog_rows = [r for r in results if r["expected_programs"] is not None and r["decision"].category == "in_scope"]
+    prog_ok = sum(sorted(r["decision"].programs) == sorted(r["expected_programs"]) for r in prog_rows)
+    kind_rows = [r for r in results if r["expected_kind"] and r["decision"].category == "in_scope"]
+    kind_ok = sum(r["decision"].question_kind == r["expected_kind"] for r in kind_rows)
 
+    print("=" * 78)
+    print(title)
     print("=" * 78)
     print("Per-category accuracy")
     for cat in CATEGORIES:
@@ -121,11 +150,23 @@ def report(results: list[dict], *, show_all: bool) -> int:
     print(f"Latency (all):      mean {statistics.mean(latencies) if latencies else 0:.0f} ms, p95 {p95(latencies):.0f} ms")
     if llm_lat:
         print(f"Latency (LLM path): mean {statistics.mean(llm_lat):.0f} ms, p95 {p95(llm_lat):.0f} ms")
+    if prog_rows:
+        print(f"Secondary — programs exact match (in_scope rows with expectation): {prog_ok}/{len(prog_rows)} {pct(prog_ok, len(prog_rows))}")
+    if kind_rows:
+        print(f"Secondary — question_kind match (in_scope rows with expectation): {kind_ok}/{len(kind_rows)} {pct(kind_ok, len(kind_rows))}")
     print()
     print(f"Overall category accuracy: {pct(correct, total)} ({correct}/{total})")
     print("=" * 78)
 
     misses = [r for r in results if r["decision"].category != r["expected"]]
+    if opaque:
+        if misses:
+            print("\nMISSES (blind set — contents withheld)")
+            for r in misses:
+                d = r["decision"]
+                print(f"  line {r['line']} ({r['level']}): expected={r['expected']} got={d.category} decided_by={d.decided_by}")
+        return len(misses)
+
     rows_to_show = results if show_all else misses
     if rows_to_show:
         print("\nMISSES" if not show_all else "\nALL ROWS")
@@ -135,7 +176,9 @@ def report(results: list[dict], *, show_all: bool) -> int:
             print("-" * 78)
             print(f"[{flag}] line {r['line']} ({r['level']}): {r['question']}")
             print(f"       expected={r['expected']}  got={d.category}  decided_by={d.decided_by}  conf={d.confidence}  lang={d.language}")
-            print(f"       faculty={d.faculty} program={d.program} codes={d.course_codes} kind={d.question_kind} latency={d.latency_ms}ms")
+            print(f"       programs={d.programs} codes={d.course_codes} kind={d.question_kind} latency={d.latency_ms}ms")
+            if r["expected_programs"] is not None or r["expected_kind"]:
+                print(f"       expected_programs={r['expected_programs']} expected_kind={r['expected_kind']}")
             print(f"       rule_reason={r['debug'].get('rule_reason')}")
             for i, raw in enumerate(r["debug"].get("raw_outputs") or [], start=1):
                 print(f"       raw[{i}]: {raw!r}")
@@ -149,23 +192,45 @@ def main() -> int:
     ap.add_argument("--csv", type=Path, default=DEFAULT_CSV)
     ap.add_argument("--level", choices=["easy", "medium", "hard"], default=None)
     ap.add_argument("--dry-run", action="store_true", help="rule layer only (no API calls)")
+    ap.add_argument("--no-rules", action="store_true", help="bypass rule decisions; every row goes to the LLM")
+    ap.add_argument("--no-cache", action="store_true", help="do not read/write the .cache/eval response cache")
     ap.add_argument("--model", default=None, help="ThaiLLM model id (default: GATEKEEPER_MODEL or project default)")
     ap.add_argument("--timeout", type=float, default=None, help="per-call timeout in seconds")
     ap.add_argument("--concurrency", type=int, default=4)
     ap.add_argument("--show-all", action="store_true", help="print every row, not only misses")
     ap.add_argument("--strict", action="store_true", help="exit 1 if any row misses")
+    ap.add_argument("--no-blind", action="store_true", help="skip tests/eval_blind.csv even if present")
     args = ap.parse_args()
+    if args.dry_run and args.no_rules:
+        ap.error("--dry-run and --no-rules are mutually exclusive")
 
     rows = load_rows(args.csv, args.level)
     if not rows:
         print("no rows to evaluate", file=sys.stderr)
         return 2
-    settings = load_settings(model=args.model, timeout_s=args.timeout)
-    mode = "DRY RUN (rules only)" if args.dry_run else f"model={settings.model} timeout={settings.timeout_s}s"
+    settings = load_settings(model=args.model, timeout_s=args.timeout,
+                             cache_dir=None if args.no_cache else str(DEFAULT_CACHE_DIR))
+    if args.no_cache:
+        settings = settings.__class__(**{**settings.__dict__, "cache_dir": None})
+    if args.dry_run:
+        mode = "DRY RUN (rules only)"
+    else:
+        mode = f"{'LLM-only (no rules)' if args.no_rules else 'rules + LLM'} model={settings.model} timeout={settings.timeout_s}s cache={'off' if args.no_cache else settings.cache_dir}"
     print(f"Evaluating {len(rows)} rows from {args.csv} [{mode}]")
-    results = asyncio.run(run_all(rows, dry_run=args.dry_run, settings=settings, concurrency=args.concurrency))
-    misses = report(results, show_all=args.show_all)
-    return 1 if (args.strict and misses) else 0
+    results = asyncio.run(run_all(rows, dry_run=args.dry_run, no_rules=args.no_rules, settings=settings, concurrency=args.concurrency))
+    misses = report(results, title=f"MAIN SET — {args.csv.name}" + (" — LLM-only" if args.no_rules else ""), show_all=args.show_all, opaque=False)
+
+    blind_misses = 0
+    if BLIND_CSV.exists() and not args.no_blind:
+        blind_rows = load_rows(BLIND_CSV, args.level)
+        if blind_rows:
+            print(f"\nEvaluating {len(blind_rows)} blind rows from {BLIND_CSV.name} (held-out; contents not shown)")
+            blind_results = asyncio.run(run_all(blind_rows, dry_run=args.dry_run, no_rules=args.no_rules, settings=settings, concurrency=args.concurrency))
+            blind_misses = report(blind_results, title=f"BLIND SET — {BLIND_CSV.name}" + (" — LLM-only" if args.no_rules else ""), show_all=False, opaque=True)
+
+    if not args.dry_run:
+        print(f"\nLLM cache: hits={CACHE_STATS['hits']} misses={CACHE_STATS['misses']}")
+    return 1 if (args.strict and (misses or blind_misses)) else 0
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ replies are deliberately short and never mention internals.
 
 from __future__ import annotations
 
-from .config import FACULTIES
+from .config import FACULTY_NAME_EN, FACULTY_NAME_TH, FACULTY_NAME_ZH, FACULTY_WEBSITE, PROGRAMS
 from .schema import Category, Language
 
 KMITL_SITE = "https://www.kmitl.ac.th"
@@ -14,9 +14,10 @@ KMITL_REG = "https://www.reg.kmitl.ac.th"
 KMITL_ADMISSION = "https://www1.reg.kmitl.ac.th/admission"
 TCAS = "https://www.mytcas.com"
 
-_FACULTY_LIST_TH = ", ".join(f.name_th for f in FACULTIES)
-_FACULTY_LIST_EN = ", ".join(f.name_en for f in FACULTIES)
-_FACULTY_LIST_ZH = "、".join(f.name_zh for f in FACULTIES)
+_PROGRAM_IDS = "/".join(p.id for p in PROGRAMS)
+_FACULTY_LIST_TH = f"{FACULTY_NAME_TH} ({_PROGRAM_IDS})"
+_FACULTY_LIST_EN = f"{FACULTY_NAME_EN} ({_PROGRAM_IDS})"
+_FACULTY_LIST_ZH = f"{FACULTY_NAME_ZH}（{_PROGRAM_IDS}）"
 
 _GENERAL_CHANNELS: dict[str, dict[str, str]] = {
     "weather": {
@@ -60,6 +61,11 @@ _KMITL_CHANNELS: dict[str, dict[str, str]] = {
         "en": "the KMITL Student Affairs Office or the faculty website",
         "zh": "学生事务办公室或学院官网",
     },
+    "faculty": {
+        "th": "เว็บไซต์ของคณะนั้นโดยตรง หรือสำนักทะเบียนและประมวลผล สจล.",
+        "en": "that faculty's own website or the KMITL Office of the Registrar",
+        "zh": "该学院官网或先皇技术学院注册处",
+    },
     "default": {
         "th": "สำนักทะเบียนและประมวลผล สจล.",
         "en": "the KMITL Office of the Registrar",
@@ -76,7 +82,7 @@ def general_reply(language: Language, topic: str | None = None) -> str:
     lang = _lang(language)
     channel = _GENERAL_CHANNELS.get(topic or "default", _GENERAL_CHANNELS["default"])[lang]
     if lang == "th":
-        base = f"ขออภัยค่ะ ฉันตอบได้เฉพาะคำถามเกี่ยวกับหลักสูตรของ {_FACULTY_LIST_TH} สจล. เท่านั้น"
+        base = f"ขออภัยค่ะ ฉันตอบได้เฉพาะคำถามเกี่ยวกับหลักสูตรของ{_FACULTY_LIST_TH} สจล. เท่านั้น"
         return base + (f" สำหรับเรื่องนี้แนะนำให้ลองใช้{channel}นะคะ" if channel else " หากมีคำถามเกี่ยวกับหลักสูตร ถามได้เลยค่ะ")
     if lang == "zh":
         base = f"抱歉，我只能回答有关先皇技术学院（KMITL）{_FACULTY_LIST_ZH}课程的问题。"
@@ -91,7 +97,7 @@ def other_university_reply(language: Language, university_name: str | None = Non
     if lang == "th":
         who = university_name or "มหาวิทยาลัยดังกล่าว"
         return (
-            f"ขออภัยค่ะ ฉันให้ข้อมูลได้เฉพาะหลักสูตรของ สจล. ({_FACULTY_LIST_TH}) เท่านั้น "
+            f"ขออภัยค่ะ ฉันให้ข้อมูลได้เฉพาะหลักสูตรของ{_FACULTY_LIST_TH} สจล. เท่านั้น "
             f"สำหรับข้อมูลของ{who} แนะนำให้ดูที่เว็บไซต์รับสมัครอย่างเป็นทางการ {url} หรือระบบ TCAS ({TCAS}) นะคะ"
         )
     if lang == "zh":
@@ -102,7 +108,7 @@ def other_university_reply(language: Language, university_name: str | None = Non
         )
     who = university_name or "that university"
     return (
-        f"Sorry, I only cover KMITL's curricula ({_FACULTY_LIST_EN}). "
+        f"Sorry, I only cover the curricula of KMITL's {_FACULTY_LIST_EN}. "
         f"For {who}, please check its official admissions site at {url} or the TCAS portal ({TCAS})."
     )
 
@@ -113,23 +119,23 @@ def kmitl_out_of_scope_reply(language: Language, topic: str | None = None) -> st
     if lang == "th":
         return (
             f"ขออภัยค่ะ เรื่องนี้ไม่อยู่ในเอกสารหลักสูตรที่ฉันมีข้อมูล ฉันตอบได้เฉพาะเรื่องหลักสูตร/รายวิชา/เกณฑ์การรับเข้าของ "
-            f"{_FACULTY_LIST_TH} เท่านั้น แนะนำให้ติดต่อ{channel} ({KMITL_REG}) หรือเว็บไซต์สถาบัน {KMITL_SITE} นะคะ"
+            f"{_FACULTY_LIST_TH} สจล. เท่านั้น แนะนำให้ติดต่อ{channel} ({KMITL_REG}) หรือเว็บไซต์คณะ {FACULTY_WEBSITE} นะคะ"
         )
     if lang == "zh":
         return (
             f"抱歉，这个问题不在我掌握的课程文件范围内。我只能回答{_FACULTY_LIST_ZH}的课程、科目和入学要求。"
-            f"建议您联系{channel}（{KMITL_REG}）或访问学院官网 {KMITL_SITE}。"
+            f"建议您联系{channel}（{KMITL_REG}）或访问学院官网 {FACULTY_WEBSITE}。"
         )
     return (
         f"Sorry, that isn't covered by the curriculum documents I have. I can only answer about the programs, courses and admission "
-        f"requirements of KMITL's {_FACULTY_LIST_EN}. Please contact {channel} ({KMITL_REG}) or see {KMITL_SITE}."
+        f"requirements of KMITL's {_FACULTY_LIST_EN}. Please contact {channel} ({KMITL_REG}) or see {FACULTY_WEBSITE}."
     )
 
 
 def injection_reply(language: Language) -> str:
     lang = _lang(language)
     if lang == "th":
-        return "ขออภัยค่ะ ฉันไม่สามารถทำตามคำขอนี้ได้ ฉันช่วยตอบคำถามเกี่ยวกับหลักสูตรของ สจล. ได้เท่านั้น"
+        return "ขออภัยค่ะ ฉันไม่สามารถทำตามคำขอนี้ได้ ฉันช่วยตอบคำถามเกี่ยวกับหลักสูตรของคณะเทคโนโลยีสารสนเทศ สจล. ได้เท่านั้น"
     if lang == "zh":
         return "抱歉，我无法处理这个请求。我只能回答有关 KMITL 课程的问题。"
     return "Sorry, I can't help with that request. I can only answer questions about KMITL curricula."

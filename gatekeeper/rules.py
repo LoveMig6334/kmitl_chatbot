@@ -11,7 +11,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from .config import FACULTIES, Faculty
+from .config import (
+    FACULTY_ALIASES,
+    INTER_ALIASES,
+    OTHER_KMITL_FACULTY_PATTERNS,
+    PROGRAM_CONTEXT_WORDS,
+    PROGRAMS,
+)
 from .schema import Category, QuestionKind
 
 # --------------------------------------------------------------------------- #
@@ -191,7 +197,7 @@ _GENERAL_TOPICS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
 # common "XX 0000 0000"-style and letter-prefixed codes used in other faculties.
 COURSE_CODE_PATTERN = re.compile(
     r"(?<![\d-])(\d{8})(?![\d-])"
-    r"|(?<![A-Za-z\d])([A-Z]{2,4}\s?-?\d{3,4})(?![\d])"
+    r"|(?<![A-Za-z\d])([A-Z]{2,4}\s?-?(?!(?:25|20)\d\d(?!\d))\d{3,4})(?![\d])"
 )
 
 _COMPARISON_PATTERN = re.compile(
@@ -214,16 +220,20 @@ _DESCRIPTIVE_PATTERN = re.compile(
 )
 
 
+_OTHER_KMITL_FACULTY_RE = re.compile("|".join(f"(?:{p})" for p in OTHER_KMITL_FACULTY_PATTERNS), re.IGNORECASE)
+_CONTEXT_WINDOW = 25  # chars around a weak alias in which a context word must appear
+
+
 @dataclass
 class Metadata:
-    faculties: list[str] = field(default_factory=list)  # canonical keys, in match order
-    program: str | None = None
+    programs: list[str] = field(default_factory=list)  # canonical ids, in order of first mention
+    faculty_mentioned: bool = False
     course_codes: list[str] = field(default_factory=list)
     question_kind: QuestionKind | None = None
 
     @property
-    def faculty(self) -> str | None:
-        return self.faculties[0] if len(self.faculties) == 1 else None
+    def program(self) -> str | None:
+        return self.programs[0] if len(self.programs) == 1 else None
 
 
 @dataclass
@@ -245,6 +255,16 @@ def is_injection(text: str) -> bool:
 
 def mentions_kmitl(text: str) -> bool:
     return bool(_KMITL_PATTERN.search(text))
+
+
+def mentions_faculty(text: str) -> bool:
+    """True when the IT faculty itself is named (any language)."""
+    lowered = text.lower()
+    return any(_alias_search(lowered, a) is not None for a in FACULTY_ALIASES)
+
+
+def mentions_other_kmitl_faculty(text: str) -> bool:
+    return bool(_OTHER_KMITL_FACULTY_RE.search(text))
 
 
 def find_other_universities(text: str) -> list[University]:
@@ -278,79 +298,104 @@ def extract_course_codes(text: str) -> list[str]:
     return codes
 
 
-def _faculty_matches(lowered: str, faculty: Faculty) -> bool:
-    for alias in faculty.aliases:
-        if alias.isascii():
-            if re.search(rf"(?<![a-z]){re.escape(alias)}(?![a-z])", lowered):
-                return True
-        elif alias in lowered:
-            return True
-    return False
+def _alias_search(lowered: str, alias: str, *, case_sensitive_src: str | None = None) -> re.Match[str] | None:
+    """Find ``alias`` in ``lowered``; ASCII aliases must match as whole words."""
+    if alias.isascii():
+        flags = 0 if case_sensitive_src is not None else re.IGNORECASE
+        src = case_sensitive_src if case_sensitive_src is not None else lowered
+        return re.search(rf"(?<![A-Za-z]){re.escape(alias)}(?![A-Za-z])", src, flags)
+    pos = lowered.find(alias)
+    if pos < 0:
+        return None
+    return re.compile(re.escape(alias)).search(lowered, pos)
 
 
-def resolve_faculties(text: str, scope_filter: list[str] | None = None) -> list[str]:
+def _has_context(lowered: str, start: int, end: int) -> bool:
+    window = lowered[max(0, start - _CONTEXT_WINDOW): end + _CONTEXT_WINDOW]
+    return any(w in window for w in PROGRAM_CONTEXT_WORDS)
+
+
+def resolve_programs(text: str, scope_filter: list[str] | None = None) -> list[str]:
+    """Return the in-scope program ids the text refers to, in order of mention.
+
+    Disambiguation (see config): bare "IT"/"ไอที"/"AI" only count with a
+    program-context word nearby; anything "inter"/นานาชาติ is BIT, never IT.
+    """
     lowered = text.lower()
-    found: list[tuple[int, str]] = []
-    for f in FACULTIES:
-        if _faculty_matches(lowered, f):
-            first = min(
-                (lowered.find(a.lower()) for a in f.aliases if a.lower() in lowered),
-                default=len(lowered),
-            )
-            found.append((first, f.key))
-    keys = [k for _, k in sorted(found)]
+    hits: dict[str, tuple[int, int, bool]] = {}  # id -> (start, end, strong)
+    for prog in PROGRAMS:
+        best: tuple[int, int, bool] | None = None
+        for alias in prog.aliases:
+            m = _alias_search(lowered, alias)
+            if m and (best is None or m.start() < best[0]):
+                best = (m.start(), m.end(), True)
+        for alias in prog.exact_aliases:
+            m = _alias_search(lowered, alias, case_sensitive_src=text)
+            if m and (best is None or m.start() < best[0]):
+                best = (m.start(), m.end(), True)
+        if best is None:
+            for alias in prog.weak_aliases:
+                for m in re.finditer(
+                    rf"(?<![A-Za-z]){re.escape(alias)}(?![A-Za-z])" if alias.isascii() else re.escape(alias), lowered
+                ):
+                    if _has_context(lowered, m.start(), m.end()):
+                        best = (m.start(), m.end(), False)
+                        break
+                if best:
+                    break
+        if best:
+            hits[prog.id] = best
+
+    # "IT inter"/นานาชาติ always means BIT (never the IT program); an IT alias that
+    # overlaps the BIT alias span ("สาขาวิชาเทคโนโลยีสารสนเทศทางธุรกิจ") is BIT too.
+    if "IT" in hits and ("BIT" in hits or any(_alias_search(lowered, a) for a in INTER_ALIASES)):
+        it_s, it_e, it_strong = hits["IT"]
+        overlaps = False
+        if "BIT" in hits:
+            b_s, b_e, _ = hits["BIT"]
+            overlaps = it_s < b_e and b_s < it_e
+        inter = any(_alias_search(lowered, a) for a in INTER_ALIASES)
+        if not it_strong or overlaps or inter:
+            del hits["IT"]
+            if "BIT" not in hits and inter:
+                hits["BIT"] = (it_s, it_e, True)
+
+    ids = [pid for pid, _ in sorted(hits.items(), key=lambda kv: kv[1][0])]
     if scope_filter:
-        allowed = {k.upper() for k in scope_filter}
-        narrowed = [k for k in keys if k in allowed]
+        allowed = [s.upper() for s in scope_filter if s]
+        narrowed = [pid for pid in ids if pid in allowed]
         if narrowed:
-            keys = narrowed
-        elif not keys and len(allowed) == 1:
-            keys = [next(iter(allowed))]
-    return keys
+            ids = narrowed
+        elif not ids and len(allowed) == 1 and allowed[0] in {p.id for p in PROGRAMS}:
+            ids = [allowed[0]]
+    return ids
 
 
-def extract_program(text: str, faculties: list[str] | None = None) -> str | None:
-    lowered = text.lower()
-    candidates = [f for f in FACULTIES if not faculties or f.key in faculties] or list(FACULTIES)
-    # Prefer faculties actually mentioned, then any program alias anywhere.
-    best: tuple[int, str] | None = None
-    for f in candidates:
-        for code, aliases in f.programs.items():
-            for alias in aliases:
-                if alias.isascii():
-                    m = re.search(rf"(?<![a-z]){re.escape(alias)}(?![a-z])", lowered)
-                    pos = m.start() if m else -1
-                else:
-                    pos = lowered.find(alias)
-                if pos >= 0 and (best is None or pos < best[0]):
-                    best = (pos, code)
-    return best[1] if best else None
-
-
-def classify_question_kind(text: str, faculties: list[str] | None = None) -> QuestionKind:
-    if (faculties and len(faculties) > 1) or _COMPARISON_PATTERN.search(text):
+def classify_question_kind(text: str, programs: list[str] | None = None) -> QuestionKind:
+    if (programs and len(programs) > 1) or _COMPARISON_PATTERN.search(text):
         return "comparison"
     if _DESCRIPTIVE_PATTERN.search(text) and not _FACT_PATTERN.search(text):
         return "descriptive"
     if _FACT_PATTERN.search(text):
         return "fact_lookup"
-    if _DESCRIPTIVE_PATTERN.search(text):
-        return "descriptive"
     return "descriptive"
 
 
 def extract_metadata(text: str, scope_filter: list[str] | None = None) -> Metadata:
-    faculties = resolve_faculties(text, scope_filter)
+    programs = resolve_programs(text, scope_filter)
     return Metadata(
-        faculties=faculties,
-        program=extract_program(text, faculties or None),
+        programs=programs,
+        faculty_mentioned=mentions_faculty(text),
         course_codes=extract_course_codes(text),
-        question_kind=classify_question_kind(text, faculties),
+        question_kind=classify_question_kind(text, programs),
     )
 
 
 def apply_rules(text: str, scope_filter: list[str] | None = None) -> RuleResult:
-    """Run the deterministic layer.  ``category`` is ``None`` when unsure."""
+    """Run the deterministic layer.  ``category`` is ``None`` when unsure.
+
+    Principle: rules decide only when near-certain; otherwise abstain to the LLM.
+    """
     meta = extract_metadata(text, scope_filter)
     stripped = text.strip()
 
@@ -363,28 +408,34 @@ def apply_rules(text: str, scope_filter: list[str] | None = None) -> RuleResult:
 
     kmitl = mentions_kmitl(stripped)
     others = find_other_universities(stripped)
-    in_scope_signal = bool(meta.faculties) or meta.program is not None or bool(meta.course_codes)
+    other_kmitl_faculty = mentions_other_kmitl_faculty(stripped)
+    in_scope_signal = meta.faculty_mentioned or bool(meta.programs) or bool(meta.course_codes)
+    curriculum = has_curriculum_keywords(stripped)
+    gen_topic = find_general_topic(stripped)
+    oos_topic = find_out_of_scope_topic(stripped)
 
-    # 2. Another university named and KMITL not mentioned -> redirect.
-    if others and not kmitl:
+    # 2. Another university named, and nothing points at our faculty/programs -> redirect.
+    #    (Comparisons with our programs, or KMITL mentions, abstain to the LLM.)
+    if others and not kmitl and not in_scope_signal:
         return RuleResult(
             "off_topic_other_university", 0.95, f"other university: {others[0].key}", meta, university=others[0]
         )
 
-    # 3. KMITL logistics that the curriculum documents do not cover.
-    oos_topic = find_out_of_scope_topic(stripped)
-    if oos_topic and not others and not has_curriculum_keywords(stripped):
-        if kmitl or in_scope_signal or not find_general_topic(stripped):
-            return RuleResult("out_of_scope_kmitl", 0.9, f"kmitl logistics: {oos_topic}", meta, topic=oos_topic)
+    # 3. Another KMITL faculty named, ours not -> out of scope (KMITL).
+    if other_kmitl_faculty and not others and not in_scope_signal:
+        return RuleResult("out_of_scope_kmitl", 0.9, "other KMITL faculty", meta, topic="faculty")
 
-    # 4. Obvious everyday topics with no curriculum signal at all.
-    gen_topic = find_general_topic(stripped)
-    if gen_topic and not kmitl and not in_scope_signal and not has_curriculum_keywords(stripped):
+    # 4. KMITL logistics that the curriculum documents do not cover.
+    if oos_topic and not others and not curriculum and (kmitl or in_scope_signal or not gen_topic):
+        return RuleResult("out_of_scope_kmitl", 0.9, f"kmitl logistics: {oos_topic}", meta, topic=oos_topic)
+
+    # 5. Obvious everyday topics with no curriculum signal at all.
+    if gen_topic and not kmitl and not in_scope_signal and not curriculum:
         return RuleResult("off_topic_general", 0.9, f"general topic: {gen_topic}", meta, topic=gen_topic)
 
-    # 5. Clear curriculum question about an in-scope faculty/program/course.
-    if not others and in_scope_signal and (has_curriculum_keywords(stripped) or kmitl or meta.course_codes):
-        return RuleResult("in_scope", 0.92, "faculty/program + curriculum keywords", meta)
+    # 6. Clear curriculum question about our faculty / a program / a course code.
+    if in_scope_signal and not others and not other_kmitl_faculty and (curriculum or meta.course_codes):
+        return RuleResult("in_scope", 0.92, "program/faculty + curriculum keywords", meta)
 
     return RuleResult(None, 0.0, "no rule fired", meta, university=others[0] if others else None,
                       topic=gen_topic or oos_topic)

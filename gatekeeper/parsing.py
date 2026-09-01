@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from .config import FACULTIES, FACULTY_KEYS
+from .config import PROGRAM_IDS, PROGRAMS
 from .schema import CATEGORIES, LANGUAGES, QUESTION_KINDS
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
@@ -63,8 +63,7 @@ _LANG_ALIASES = {
 class LLMVerdict:
     category: str
     language: str | None = None
-    faculty: str | None = None
-    program: str | None = None
+    programs: list[str] = field(default_factory=list)
     question_kind: str | None = None
     university: str | None = None
     topic: str | None = None
@@ -188,29 +187,40 @@ def normalize_question_kind(value: object) -> str | None:
     return _KIND_ALIASES.get(s)
 
 
-def normalize_faculty(value: object) -> str | None:
-    """Map a free-form faculty string (any language) to a canonical key."""
-    s = _norm(value)
-    if s is None or s in ("null", "none", "n/a", "-"):
+def _program_id_for(value: str) -> str | None:
+    s = value.strip().lower()
+    if not s or s in ("null", "none", "n/a", "-"):
         return None
-    if s.upper() in FACULTY_KEYS:
+    if s.upper() in PROGRAM_IDS:
         return s.upper()
-    for f in FACULTIES:
-        names = (f.name_th.lower(), f.name_en.lower(), f.name_zh.lower(), *f.aliases)
-        if any(n and (n in s or s in n) for n in names):
-            return f.key
+    for p in PROGRAMS:
+        names = (p.name_th.lower(), p.name_en.lower(), *p.aliases, *(a.lower() for a in p.exact_aliases), *p.weak_aliases)
+        for n in names:
+            if not n:
+                continue
+            if n.isascii():
+                if re.search(rf"(?<![a-z]){re.escape(n)}(?![a-z])", s):
+                    return p.id
+            elif n in s or s in n:
+                return p.id
     return None
 
 
-def normalize_program(value: object) -> str | None:
-    s = _norm(value)
-    if s is None or s in ("null", "none", "n/a", "-"):
-        return None
-    for f in FACULTIES:
-        for code, aliases in f.programs.items():
-            if s.upper() == code or any(a in s or s in a for a in aliases if len(a) > 1):
-                return code
-    return str(value).strip() or None
+def normalize_programs(value: object) -> list[str]:
+    """Map a free-form program string/list (any language) to canonical ids."""
+    if value is None:
+        return []
+    items: list[str]
+    if isinstance(value, (list, tuple, set)):
+        items = [str(v) for v in value if v is not None]
+    else:
+        items = re.split(r"[,/;]|\s+(?:and|กับ|และ|与|和)\s+", str(value))
+    out: list[str] = []
+    for item in items:
+        pid = _program_id_for(item)
+        if pid and pid not in out:
+            out.append(pid)
+    return out
 
 
 def _confidence(value: object) -> float | None:
@@ -234,8 +244,7 @@ def parse_verdict(raw: str) -> LLMVerdict | None:
     return LLMVerdict(
         category=category,
         language=normalize_language(obj.get("language") or obj.get("lang")),
-        faculty=normalize_faculty(obj.get("faculty")),
-        program=normalize_program(obj.get("program")),
+        programs=normalize_programs(obj.get("programs") if obj.get("programs") is not None else obj.get("program")),
         question_kind=normalize_question_kind(obj.get("question_kind") or obj.get("kind")),
         university=(_norm(obj.get("university")) and str(obj.get("university")).strip()) or None,
         topic=_norm(obj.get("topic")),

@@ -1,23 +1,25 @@
-"""Configuration for the gatekeeper (models, timeouts, in-scope faculties).
+"""Configuration for the gatekeeper (scope definition, models, timeouts).
 
-Everything is overridable through environment variables so the module can be
-tuned without code changes:
+Scope: ONE faculty — คณะเทคโนโลยีสารสนเทศ สจล. — and its four B.Sc. programs.
+The scope unit downstream is the *program* (AIT / DSBA / BIT / IT).
 
+Environment overrides:
 - ``GATEKEEPER_MODEL``        ThaiLLM model used for classification
 - ``GATEKEEPER_TIMEOUT_S``    per-call timeout in seconds (float)
 - ``GATEKEEPER_MAX_TOKENS``   max tokens for the classification reply
+- ``GATEKEEPER_CACHE_DIR``    optional on-disk LLM response cache (eval only)
 - ``THAILLM_API_KEY`` / ``THAILLM_BASE_URL``  shared with the rest of the project
 """
 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 try:  # reuse the project's model registry when the package is installed
     from thai_llm_kmitl.models import DEFAULT_MODEL as _PROJECT_DEFAULT_MODEL
     from thai_llm_kmitl.models import MODELS as _PROJECT_MODELS
-except Exception:  # pragma: no cover - fallback when src/ is not importable
+except ImportError:  # pragma: no cover - fallback when src/ is not importable
     _PROJECT_DEFAULT_MODEL = "openthaigpt-thaillm-8b-instruct-v7.2"
     _PROJECT_MODELS = [
         "openthaigpt-thaillm-8b-instruct-v7.2",
@@ -31,153 +33,129 @@ MODELS: list[str] = list(_PROJECT_MODELS)
 DEFAULT_BASE_URL = "http://thaillm.or.th/api/v1"
 USER_AGENT = "thai-llm-kmitl/0.1"
 
-
-@dataclass(frozen=True)
-class Faculty:
-    """One in-scope faculty with the aliases used to recognise it."""
-
-    key: str  # canonical id used in GateDecision.faculty
-    name_th: str
-    name_en: str
-    name_zh: str
-    aliases: tuple[str, ...]  # lower-cased substrings (Thai/English/Chinese)
-    programs: dict[str, tuple[str, ...]] = field(default_factory=dict)  # code -> aliases
-    website: str = "https://www.kmitl.ac.th"
-
-
-# NOTE: the spec left the four faculties as placeholders; the IT faculty is
-# certain (it appears in the eval set), the other three are reasonable defaults
-# and are trivially editable here.
-FACULTIES: tuple[Faculty, ...] = (
-    Faculty(
-        key="IT",
-        name_th="คณะเทคโนโลยีสารสนเทศ",
-        name_en="School of Information Technology",
-        name_zh="信息技术学院",
-        aliases=(
-            "เทคโนโลยีสารสนเทศ",
-            "คณะไอที",
-            "คณะ it",
-            "school of information technology",
-            "faculty of information technology",
-            "information technology",
-            "信息技术学院",
-            "资讯科技学院",
-            "信息技术",
-        ),
-        programs={
-            "AIT": (
-                "ait",
-                "เทคโนโลยีปัญญาประดิษฐ์",
-                "ปัญญาประดิษฐ์",
-                "artificial intelligence technology",
-                "人工智能技术",
-                "人工智能",
-            ),
-            "DSBA": (
-                "dsba",
-                "วิทยาการข้อมูลและการวิเคราะห์เชิงธุรกิจ",
-                "วิทยาการข้อมูล",
-                "data science and business analytics",
-                "data science",
-                "数据科学",
-            ),
-            "BIT": (
-                "bit",
-                "business information technology",
-                "เทคโนโลยีสารสนเทศทางธุรกิจ",
-                "商业信息技术",
-            ),
-            "IT": (
-                "สาขาวิชาเทคโนโลยีสารสนเทศ",
-                "สาขาเทคโนโลยีสารสนเทศ",
-                "สาขา it",
-                "สาขาไอที",
-                "it program",
-                "information technology program",
-                "信息技术专业",
-            ),
-        },
-        website="https://www.it.kmitl.ac.th",
-    ),
-    Faculty(
-        key="ENG",
-        name_th="คณะวิศวกรรมศาสตร์",
-        name_en="School of Engineering",
-        name_zh="工程学院",
-        aliases=(
-            "วิศวกรรมศาสตร์",
-            "คณะวิศวะ",
-            "วิศวะ",
-            "วิศวกรรม",
-            "school of engineering",
-            "faculty of engineering",
-            "engineering",
-            "工程学院",
-            "工程",
-        ),
-        programs={
-            "CE": ("วิศวกรรมคอมพิวเตอร์", "computer engineering", "计算机工程"),
-            "EE": ("วิศวกรรมไฟฟ้า", "electrical engineering", "电气工程"),
-            "ME": ("วิศวกรรมเครื่องกล", "mechanical engineering", "机械工程"),
-            "CIE": ("วิศวกรรมโยธา", "civil engineering", "土木工程"),
-            "ROBOTICS": ("วิศวกรรมหุ่นยนต์", "robotics", "机器人"),
-        },
-        website="https://engineer.kmitl.ac.th",
-    ),
-    Faculty(
-        key="SCI",
-        name_th="คณะวิทยาศาสตร์",
-        name_en="School of Science",
-        name_zh="理学院",
-        aliases=(
-            "คณะวิทยาศาสตร์",
-            "คณะวิทย์",
-            "school of science",
-            "faculty of science",
-            "理学院",
-        ),
-        programs={
-            "CS": ("วิทยาการคอมพิวเตอร์", "computer science", "计算机科学"),
-            "MATH": ("คณิตศาสตร์ประยุกต์", "applied mathematics", "应用数学"),
-            "CHEM": ("เคมี", "chemistry", "化学"),
-            "PHYS": ("ฟิสิกส์", "physics", "物理"),
-        },
-        website="https://www.science.kmitl.ac.th",
-    ),
-    Faculty(
-        key="BUS",
-        name_th="คณะบริหารธุรกิจ",
-        name_en="KMITL Business School",
-        name_zh="商学院",
-        aliases=(
-            "บริหารธุรกิจ",
-            "คณะบริหาร",
-            "business school",
-            "business administration",
-            "kbs",
-            "商学院",
-            "工商管理",
-        ),
-        programs={
-            "BBA": ("bba", "บริหารธุรกิจบัณฑิต", "bachelor of business administration"),
-            "ENTREPRENEUR": ("ผู้ประกอบการ", "entrepreneurship", "创业"),
-        },
-        website="https://kbs.kmitl.ac.th",
-    ),
+# --------------------------------------------------------------------------- #
+# The single in-scope faculty
+# --------------------------------------------------------------------------- #
+FACULTY_KEY = "IT"
+FACULTY_NAME_TH = "คณะเทคโนโลยีสารสนเทศ"
+FACULTY_NAME_EN = "Faculty of Information Technology"
+FACULTY_NAME_ZH = "信息技术学院"
+FACULTY_WEBSITE = "https://www.it.kmitl.ac.th"
+# lower-cased substrings / words that mean "the IT faculty" (any language)
+FACULTY_ALIASES: tuple[str, ...] = (
+    "เทคโนโลยีสารสนเทศ",
+    "คณะไอที",
+    "คณะ it",
+    "faculty of information technology",
+    "school of information technology",
+    "information technology",
+    "信息技术学院",
+    "资讯科技学院",
+    "信息技术",
 )
 
-FACULTY_KEYS: tuple[str, ...] = tuple(f.key for f in FACULTIES)
+# BIT aliases that mean "the international program": when one of these is present
+# a bare/weak "IT" always refers to BIT, never to the IT program.
+INTER_ALIASES: tuple[str, ...] = ("it inter", "ไอทีอินเตอร์", "อินเตอร์", "นานาชาติ", "international", "国际", "inter")
+
+# Words that, near a bare "IT"/"ไอที"/"AI", signal a program-level reference.
+PROGRAM_CONTEXT_WORDS: tuple[str, ...] = (
+    "สาขา", "หลักสูตร", "ปกติ", "2565", "2566", "program", "programme", "major",
+    "curriculum", "degree", "专业", "课程",
+)
 
 
-def faculty_by_key(key: str | None) -> Faculty | None:
-    if key is None:
+@dataclass(frozen=True)
+class Program:
+    """One in-scope B.Sc. program and the aliases used to recognise it."""
+
+    id: str
+    name_th: str
+    name_en: str
+    version_th: str
+    aliases: tuple[str, ...]  # lower-cased; ASCII ones matched as whole words
+    exact_aliases: tuple[str, ...] = ()  # case-sensitive whole words (e.g. "BIT")
+    weak_aliases: tuple[str, ...] = ()  # only count when PROGRAM_CONTEXT_WORDS are nearby
+
+
+PROGRAMS: tuple[Program, ...] = (
+    Program(
+        id="AIT",
+        name_th="สาขาวิชาเทคโนโลยีปัญญาประดิษฐ์",
+        name_en="Artificial Intelligence Technology",
+        version_th="หลักสูตรใหม่ พ.ศ. 2566",
+        aliases=(
+            "ait", "เอไอที", "ปัญญาประดิษฐ์", "สาขา ai", "หลักสูตร ai",
+            "artificial intelligence technology", "artificial intelligence", "人工智能技术", "人工智能",
+        ),
+        weak_aliases=("ai",),
+    ),
+    Program(
+        id="DSBA",
+        name_th="สาขาวิชาวิทยาการข้อมูลและการวิเคราะห์เชิงธุรกิจ",
+        name_en="Data Science and Business Analytics",
+        version_th="หลักสูตรปรับปรุง พ.ศ. 2565",
+        aliases=(
+            "dsba", "ดาต้า", "data science", "data sci", "วิทยาการข้อมูล",
+            "data science and business analytics", "business analytics", "数据科学",
+        ),
+        exact_aliases=("DS",),
+        weak_aliases=("ds",),
+    ),
+    Program(
+        id="BIT",
+        name_th="สาขาวิชาเทคโนโลยีสารสนเทศทางธุรกิจ (หลักสูตรนานาชาติ)",
+        name_en="Business Information Technology (International Program)",
+        version_th="หลักสูตรปรับปรุง พ.ศ. 2565",
+        aliases=(
+            "it inter", "ไอทีอินเตอร์", "อินเตอร์", "นานาชาติ", "international",
+            "business information technology", "เทคโนโลยีสารสนเทศทางธุรกิจ", "商业信息技术", "国际",
+        ),
+        exact_aliases=("BIT",),
+    ),
+    Program(
+        id="IT",
+        name_th="สาขาวิชาเทคโนโลยีสารสนเทศ",
+        name_en="Information Technology",
+        version_th="หลักสูตรปรับปรุง พ.ศ. 2565",
+        aliases=(
+            "สาขาไอที", "สาขา it", "สาขาวิชาเทคโนโลยีสารสนเทศ", "สาขาเทคโนโลยีสารสนเทศ",
+            "it ปกติ", "ไอทีปกติ", "ไอที ปกติ", "ภาคปกติ", "หลักสูตร it", "หลักสูตรไอที",
+            "it program", "information technology program", "信息技术专业",
+        ),
+        weak_aliases=("it", "ไอที"),
+    ),
+)
+PROGRAM_IDS: tuple[str, ...] = tuple(p.id for p in PROGRAMS)
+
+
+def program_by_id(pid: str | None) -> Program | None:
+    if pid is None:
         return None
-    k = key.strip().upper()
-    for f in FACULTIES:
-        if f.key == k:
-            return f
+    k = pid.strip().upper()
+    for p in PROGRAMS:
+        if p.id == k:
+            return p
     return None
+
+
+# Other KMITL faculties/colleges: questions about them are ``out_of_scope_kmitl``.
+# (Regex fragments, case-insensitive.)  "วิศวกรรมซอฟต์แวร์" is deliberately NOT
+# matched — it is a course name inside the IT curriculum.
+OTHER_KMITL_FACULTY_PATTERNS: tuple[str, ...] = (
+    r"คณะวิศว|วิศวะ|วิศวกรรมศาสตร์|วิศวกรรม(ไฟฟ้า|เครื่องกล|โยธา|คอมพิวเตอร์|เคมี|อุตสาหการ|โทรคมนาคม|เกษตร|อิเล็กทรอนิกส์|ระบบควบคุม|การวัด|ชีวการแพทย์|ยานยนต์|หุ่นยนต์)"
+    r"|faculty of engineering|school of engineering|engineering faculty|工程学院",
+    r"สถาปัตย|architecture|建筑学院",
+    r"คณะวิทยาศาสตร์|คณะวิทย์|faculty of science|school of science|理学院",
+    r"บริหารธุรกิจ|คณะบริหาร|\bkbs\b|business school|business administration|商学院",
+    r"ครุศาสตร์อุตสาหกรรม|industrial education",
+    r"อุตสาหกรรมอาหาร|food industry",
+    r"เทคโนโลยีการเกษตร|agricultural technology|agro-industry",
+    r"ศิลปศาสตร์|liberal arts",
+    r"คณะแพทย|แพทยศาสตร์|faculty of medicine|medical school|医学院",
+    r"ทันตแพทย|dentistry",
+    r"นวัตกรรมการผลิต|วิทยาลัยนาโน|nanotechnology|อุตสาหกรรมการบิน|aviation|วิทยาเขตชุมพร|วิทยาลัยวิศวกรรมสังคีต|music engineering",
+)
 
 
 @dataclass(frozen=True)
@@ -189,6 +167,7 @@ class Settings:
     base_url: str = DEFAULT_BASE_URL
     api_key: str | None = None
     max_attempts: int = 2  # first try + one retry
+    cache_dir: str | None = None  # on-disk response cache (eval harness only)
 
 
 def load_settings(**overrides: object) -> Settings:
@@ -197,7 +176,7 @@ def load_settings(**overrides: object) -> Settings:
         from dotenv import load_dotenv
 
         load_dotenv()
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         pass
 
     values: dict[str, object] = {
@@ -207,6 +186,7 @@ def load_settings(**overrides: object) -> Settings:
         "temperature": float(os.environ.get("GATEKEEPER_TEMPERATURE", "0")),
         "base_url": os.environ.get("THAILLM_BASE_URL", DEFAULT_BASE_URL),
         "api_key": os.environ.get("THAILLM_API_KEY"),
+        "cache_dir": os.environ.get("GATEKEEPER_CACHE_DIR") or None,
     }
     values.update({k: v for k, v in overrides.items() if v is not None})
     return Settings(**values)  # type: ignore[arg-type]

@@ -1,6 +1,11 @@
 """Interface contract between the gatekeeper and the RAG pipeline.
 
 The RAG teammate imports ``GateDecision`` from here — keep it stable.
+
+CONTRACT_VERSION 2 (2026-09-01): the scope is a single faculty (``FACULTY``),
+so the ``faculty`` and ``program`` fields were replaced by ``programs`` — the
+list of in-scope program ids the question names (empty = none named, RAG
+should search all programs; two or more = a comparison).
 """
 
 from __future__ import annotations
@@ -8,6 +13,9 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+CONTRACT_VERSION = 2
+FACULTY = "IT"  # the only faculty in scope: คณะเทคโนโลยีสารสนเทศ สจล.
 
 Category = Literal[
     "in_scope",
@@ -19,6 +27,7 @@ Category = Literal[
 Language = Literal["th", "en", "zh", "other"]
 QuestionKind = Literal["fact_lookup", "descriptive", "comparison"]
 DecidedBy = Literal["rule", "llm", "fallback"]
+ProgramId = Literal["AIT", "DSBA", "BIT", "IT"]
 
 CATEGORIES: tuple[str, ...] = (
     "in_scope",
@@ -34,8 +43,7 @@ QUESTION_KINDS: tuple[str, ...] = ("fact_lookup", "descriptive", "comparison")
 class GateDecision(BaseModel):
     category: Category
     language: Language
-    faculty: str | None = None
-    program: str | None = None
+    programs: list[ProgramId] = Field(default_factory=list)  # [] = none named
     course_codes: list[str] = Field(default_factory=list)
     question_kind: QuestionKind | None = None
     direct_reply: str | None = None  # filled ONLY when category != in_scope
@@ -43,6 +51,15 @@ class GateDecision(BaseModel):
     decided_by: DecidedBy
     model_used: str | None = None
     latency_ms: int = 0
+
+    @property
+    def faculty(self) -> str:
+        return FACULTY
+
+    @property
+    def program(self) -> str | None:
+        """Convenience: the single named program, or None if zero or several."""
+        return self.programs[0] if len(self.programs) == 1 else None
 
     @property
     def forward_to_rag(self) -> bool:

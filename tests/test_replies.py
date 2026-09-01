@@ -19,6 +19,14 @@ def test_in_scope_has_no_direct_reply():
     assert build_reply("in_scope", "th") is None
 
 
+def test_replies_name_the_single_faculty_and_programs():
+    for cat in ("off_topic_general", "off_topic_other_university", "out_of_scope_kmitl"):
+        th = build_reply(cat, "th")
+        assert "คณะเทคโนโลยีสารสนเทศ" in th and "AIT" in th and "DSBA" in th
+        assert "Information Technology" in build_reply(cat, "en")
+    assert "คณะนั้น" in build_reply("out_of_scope_kmitl", "th", topic="faculty")
+
+
 def test_general_reply_suggests_channel():
     assert "อากาศ" in build_reply("off_topic_general", "th", topic="weather")
     assert "weather" in build_reply("off_topic_general", "en", topic="weather").lower()

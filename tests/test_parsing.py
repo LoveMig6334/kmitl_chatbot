@@ -1,21 +1,20 @@
 from gatekeeper.parsing import (
     extract_json_object,
     normalize_category,
-    normalize_faculty,
     normalize_language,
+    normalize_programs,
     normalize_question_kind,
     parse_verdict,
     strip_think,
 )
 
-PLAIN = '{"category": "in_scope", "language": "th", "faculty": "IT", "program": "AIT", "question_kind": "fact_lookup"}'
+PLAIN = '{"category": "in_scope", "language": "th", "programs": ["AIT"], "question_kind": "fact_lookup"}'
 
 
 def test_plain_json():
     v = parse_verdict(PLAIN)
     assert v is not None
-    assert (v.category, v.language, v.faculty, v.program, v.question_kind) == (
-        "in_scope", "th", "IT", "AIT", "fact_lookup")
+    assert (v.category, v.language, v.programs, v.question_kind) == ("in_scope", "th", ["AIT"], "fact_lookup")
 
 
 def test_fenced_json_with_think_block():
@@ -29,10 +28,10 @@ def test_strip_think_removes_block():
 
 
 def test_truncated_json_is_repaired():
-    raw = '<think>...</think>\n```json\n{\n  "category": "in_scope",\n  "language": "th",\n  "faculty": null,\n  "program":'
+    raw = '<think>...</think>\n```json\n{\n  "category": "in_scope",\n  "language": "th",\n  "programs": ["AIT",'
     v = parse_verdict(raw)
     assert v is not None
-    assert v.category == "in_scope" and v.language == "th" and v.program is None
+    assert v.category == "in_scope" and v.language == "th" and v.programs == ["AIT"]
 
 
 def test_truncated_inside_string():
@@ -68,13 +67,21 @@ def test_language_aliases():
     assert normalize_language("fr") is None
 
 
-def test_faculty_normalisation_any_language():
-    assert normalize_faculty("信息技术学院") == "IT"
-    assert normalize_faculty("คณะเทคโนโลยีสารสนเทศ") == "IT"
-    assert normalize_faculty("School of Engineering") == "ENG"
-    assert normalize_faculty("it") == "IT"
-    assert normalize_faculty("Faculty of Medicine") is None
-    assert normalize_faculty(None) is None
+def test_program_normalisation_any_language():
+    assert normalize_programs(["AIT"]) == ["AIT"]
+    assert normalize_programs("ait") == ["AIT"]
+    assert normalize_programs("人工智能技术") == ["AIT"]
+    assert normalize_programs("สาขาวิชาวิทยาการข้อมูลและการวิเคราะห์เชิงธุรกิจ") == ["DSBA"]
+    assert normalize_programs("Business Information Technology (International Program)") == ["BIT"]
+    assert normalize_programs(["IT", "DSBA", "IT"]) == ["IT", "DSBA"]
+    assert normalize_programs("IT, DSBA") == ["IT", "DSBA"]
+    assert normalize_programs("AIT และ BIT") == ["AIT", "BIT"]
+    assert normalize_programs("Faculty of Medicine") == []
+    assert normalize_programs("null") == []
+    assert normalize_programs(None) == []
+    # legacy singular key still understood
+    v = parse_verdict('{"category": "in_scope", "program": "DSBA"}')
+    assert v is not None and v.programs == ["DSBA"]
 
 
 def test_question_kind_aliases():
