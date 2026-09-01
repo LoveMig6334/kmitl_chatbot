@@ -85,5 +85,5 @@ SYSTEM_PROMPT = f"""คุณคือ "ผู้คัดกรองคำถ�
 
 def build_user_prompt(message: str) -> str:
     # Neutralise any closing tag the user may have typed to break out of the delimiter.
-    safe = message.replace("</user_message>", "</user_message​>")
+    safe = message.replace("</user_message>", "</user_message\u200b>")
     return f"<user_message>\n{safe}\n</user_message>\n\nตอบเป็น JSON บรรทัดเดียวเท่านั้น"

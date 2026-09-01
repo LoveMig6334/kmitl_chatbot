@@ -1,10 +1,8 @@
 """End-to-end tests of ``gate()`` with the LLM call monkeypatched (no API)."""
 
 import asyncio
-
-import pytest
-
 import importlib
+
 from gatekeeper import GateDecision, gate
 
 gate_mod = importlib.import_module("gatekeeper.gate")
@@ -69,7 +67,7 @@ def test_llm_path(monkeypatch):
 
 
 def test_retry_once_then_fallback_in_scope(monkeypatch):
-    fake, calls = make_fake(["not json at all", asyncio.TimeoutError()])
+    fake, calls = make_fake(["not json at all", TimeoutError()])
     monkeypatch.setattr(gate_mod._llm, "call_classifier", fake)
     d = run(gate("ช่วยแนะนำหน่อยว่าควรเรียนอะไรดี", settings=SETTINGS))
     assert len(calls) == 2
@@ -80,7 +78,7 @@ def test_retry_once_then_fallback_in_scope(monkeypatch):
 
 
 def test_retry_succeeds_on_second_attempt(monkeypatch):
-    fake, calls = make_fake([asyncio.TimeoutError(), '{"category": "out_of_scope_kmitl", "language": "th", "topic": "dorm"}'])
+    fake, calls = make_fake([TimeoutError(), '{"category": "out_of_scope_kmitl", "language": "th", "topic": "dorm"}'])
     monkeypatch.setattr(gate_mod._llm, "call_classifier", fake)
     d = run(gate("ช่วยแนะนำหน่อยว่าควรเรียนอะไรดี", settings=SETTINGS))
     assert len(calls) == 2

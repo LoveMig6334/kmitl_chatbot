@@ -27,7 +27,6 @@ import asyncio
 import csv
 import statistics
 import sys
-import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -35,9 +34,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from gatekeeper import GateDecision, gate, load_settings  # noqa: E402
-from gatekeeper.llm import CACHE_STATS  # noqa: E402
-from gatekeeper.schema import CATEGORIES  # noqa: E402
+from gatekeeper import GateDecision, gate, load_settings
+from gatekeeper.llm import CACHE_STATS
+from gatekeeper.schema import CATEGORIES
 
 TYPE_TO_CATEGORY = {
     "คำถามเกี่ยวกับคณะ": "in_scope",

@@ -138,8 +138,8 @@ def create_app(
                     gate(req.message, scope_filter=scope, settings=settings),
                     timeout=settings.timeout_s * settings.max_attempts + 5,
                 )
-            except Exception as exc:  # noqa: BLE001 - must never hang the stream
-                log.exception("gate failed: %s", exc)
+            except Exception:  # any gate failure must become an SSE error, never hang the stream
+                log.exception("gate failed")
                 status = "error:gate_failed"
                 yield sse("error", {"code": "gate_failed", "message": "Could not classify the request."})
                 return
@@ -177,8 +177,8 @@ def create_app(
                 status = "error:upstream_timeout"
                 yield sse("error", {"code": "upstream_timeout", "message": "The answer engine did not respond in time."})
                 return
-            except Exception as exc:  # noqa: BLE001 - map any answerer failure to an error event
-                log.exception("answerer failed: %s", exc)
+            except Exception:  # map any answerer failure to an error event
+                log.exception("answerer failed")
                 status = "error:answerer_failed"
                 yield sse("error", {"code": "answerer_failed", "message": "The answer engine failed."})
                 return
@@ -192,8 +192,8 @@ def create_app(
             if answer_it is not None and hasattr(answer_it, "aclose"):
                 try:
                     await answer_it.aclose()  # cancels the upstream ThaiLLM stream
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception:  # best-effort cleanup; the response is already finished
+                    log.debug("answerer aclose() raised", exc_info=True)
             log_request(
                 status=status,
                 category=decision.category if decision else None,

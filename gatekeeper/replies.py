@@ -6,7 +6,13 @@ replies are deliberately short and never mention internals.
 
 from __future__ import annotations
 
-from .config import FACULTY_NAME_EN, FACULTY_NAME_TH, FACULTY_NAME_ZH, FACULTY_WEBSITE, PROGRAMS
+from .config import (
+    FACULTY_NAME_EN,
+    FACULTY_NAME_TH,
+    FACULTY_NAME_ZH,
+    FACULTY_WEBSITE,
+    PROGRAMS,
+)
 from .schema import Category, Language
 
 KMITL_SITE = "https://www.kmitl.ac.th"

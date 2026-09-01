@@ -3,7 +3,7 @@
 import asyncio
 import json
 
-import gatekeeper.llm as llm
+from gatekeeper import llm
 from gatekeeper.config import Settings
 from gatekeeper.llm import cache_key, call_classifier
 

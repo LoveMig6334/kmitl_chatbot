@@ -10,7 +10,14 @@ Usage::
         reply = decision.direct_reply
 """
 
-from .config import DEFAULT_MODEL, MODELS, PROGRAM_IDS, PROGRAMS, Settings, load_settings
+from .config import (
+    DEFAULT_MODEL,
+    MODELS,
+    PROGRAM_IDS,
+    PROGRAMS,
+    Settings,
+    load_settings,
+)
 from .gate import gate, gate_sync
 from .schema import CONTRACT_VERSION, FACULTY, GateDecision
 

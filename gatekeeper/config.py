@@ -143,8 +143,10 @@ def program_by_id(pid: str | None) -> Program | None:
 # (Regex fragments, case-insensitive.)  "วิศวกรรมซอฟต์แวร์" is deliberately NOT
 # matched — it is a course name inside the IT curriculum.
 OTHER_KMITL_FACULTY_PATTERNS: tuple[str, ...] = (
-    r"คณะวิศว|วิศวะ|วิศวกรรมศาสตร์|วิศวกรรม(ไฟฟ้า|เครื่องกล|โยธา|คอมพิวเตอร์|เคมี|อุตสาหการ|โทรคมนาคม|เกษตร|อิเล็กทรอนิกส์|ระบบควบคุม|การวัด|ชีวการแพทย์|ยานยนต์|หุ่นยนต์)"
-    r"|faculty of engineering|school of engineering|engineering faculty|工程学院",
+    (
+        r"คณะวิศว|วิศวะ|วิศวกรรมศาสตร์|วิศวกรรม(ไฟฟ้า|เครื่องกล|โยธา|คอมพิวเตอร์|เคมี|อุตสาหการ|โทรคมนาคม|เกษตร|อิเล็กทรอนิกส์|ระบบควบคุม|การวัด|ชีวการแพทย์|ยานยนต์|หุ่นยนต์)"
+        r"|faculty of engineering|school of engineering|engineering faculty|工程学院"
+    ),
     r"สถาปัตย|architecture|建筑学院",
     r"คณะวิทยาศาสตร์|คณะวิทย์|faculty of science|school of science|理学院",
     r"บริหารธุรกิจ|คณะบริหาร|\bkbs\b|business school|business administration|商学院",
