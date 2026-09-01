@@ -101,3 +101,34 @@ Levels: easy / medium / hard. Do not copy eval questions into the few-shot promp
 `pytest -q` — pure-function tests only (rules, parser, language detection,
 reply templates, cache) plus `gate()` with the LLM call monkeypatched.
 Nothing in `tests/` calls the API.
+
+## HTTP API (`api/`)
+`uvicorn api.main:app --reload` (port 8000). Contract for the frontend team: **`docs/api-contract.md`**.
+
+Flow: `POST /chat` → `gate()` → `meta` event → either stream `direct_reply` tokens
+(non-in_scope, no citations) or `Answerer.answer()` tokens + `citations` → `done`.
+Any failure becomes an `error` event; a client disconnect stops the stream and
+`aclose()`s the answerer (which must cancel its upstream ThaiLLM call).
+`GET /health` → `{status, answerer, models}`.
+
+Env: `ANSWERER=stub|rag`, `ALLOWED_ORIGINS` (comma list, must include the Vercel
+domain + `http://localhost:3000`), `RATE_LIMIT_PER_MINUTE` (per IP, default 30),
+`LOG_CONTENT=1` to log message text, `TRUST_PROXY=1` behind a proxy,
+`ANSWER_EVENT_TIMEOUT_S`, `STUB_TOKEN_DELAY_S`. See `.env.example`.
+
+### Answerer contract (`api/answerer.py`) — the RAG teammate implements this
+```python
+class Answerer(Protocol):
+    name: str
+    def answer(self, message: str, decision: GateDecision,
+               scope: list[str] | None, history: list[Turn]) -> AsyncIterator[AnswerEvent]: ...
+# AnswerEvent.type: "token" (text) | "citations" (list[Citation]) | "done" (model_used)
+# Citation: faculty="IT", program, page, chunk_id, snippet
+```
+Provide `rag/answerer.py` with `class RagAnswerer` and set `ANSWERER=rag`; the
+API imports it lazily and fails with a clear message if missing. Wrap the
+streaming loop in `try/finally` so `aclose()` cancels the upstream request.
+`StubAnswerer` is the reference implementation.
+
+API tests (`tests/test_api.py`) use `httpx.AsyncClient` + `ASGITransport` with
+the ThaiLLM call mocked; the disconnect test drives the raw ASGI app.
