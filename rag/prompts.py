@@ -12,7 +12,10 @@ from __future__ import annotations
 from api.answerer import Turn
 from gatekeeper.config import FACULTY_WEBSITE
 
-LANGUAGE_NAMES = {"th": "ไทย", "en": "English (ตอบเป็นภาษาอังกฤษทั้งหมด)", "zh": "中文 (ตอบเป็นภาษาจีนทั้งหมด)", "other": "English"}
+LANGUAGE_NAMES = {"th": "ไทย", "en": "English (ตอบเป็นภาษาอังกฤษทั้งหมด)", "zh": "中文 (ตอบเป็นภาษาจีนทั้งหมด)", "other": "English (ตอบเป็นภาษาอังกฤษทั้งหมด)"}
+# Repeated right before the answer slot, in the target language itself — the 8B
+# models follow an instruction in the answer language far more reliably.
+LANGUAGE_REMINDER = {"th": "ตอบเป็นภาษาไทย", "en": "Answer in English only.", "zh": "请只用中文回答（课程名称和课程代码保持原文）。", "other": "Answer in English only."}
 
 # Canonical "not found" phrases.  The model is told to use them verbatim; the
 # answerer and the eval look for them to decide that an answer is a not-found.
@@ -21,7 +24,12 @@ NOT_FOUND_PHRASES: dict[str, str] = {
     "en": "not found in the curriculum documents",
     "zh": "课程文件中未找到相关信息",
 }
-NOT_FOUND_PHRASE_LIST: tuple[str, ...] = tuple(NOT_FOUND_PHRASES.values())
+NOT_FOUND_PHRASE_LIST: tuple[str, ...] = tuple(p.lower() for p in NOT_FOUND_PHRASES.values())  # match case-insensitively
+
+
+def is_not_found(answer: str) -> bool:
+    low = answer.lower()
+    return any(p in low for p in NOT_FOUND_PHRASE_LIST)
 
 # Fixed replies streamed when retrieval finds nothing (the answer model is not called).
 NOT_FOUND_REPLY: dict[str, str] = {
@@ -44,25 +52,31 @@ def not_found_reply(language: str) -> str:
     return NOT_FOUND_REPLY.get(language) or NOT_FOUND_REPLY["en"]
 
 
-SYSTEM_PROMPT = f"""คุณคือผู้ช่วยตอบคำถามเรื่องหลักสูตรของคณะเทคโนโลยีสารสนเทศ สจล. (KMITL) ให้นักเรียนมัธยมปลายที่กำลังเลือกสาขา
+SYSTEM_PROMPT = f"""คุณคือผู้ช่วยตอบคำถามเรื่องหลักสูตรของคณะเทคโนโลยีสารสนเทศ สจล. ให้นักเรียนมัธยมปลาย
 หลักสูตร: AIT (เทคโนโลยีปัญญาประดิษฐ์), DSBA (วิทยาการข้อมูลและการวิเคราะห์เชิงธุรกิจ), BIT (เทคโนโลยีสารสนเทศทางธุรกิจ นานาชาติ), IT (เทคโนโลยีสารสนเทศ)
 
 กฎ (ต้องทำตามทุกข้อ):
-1. ใช้ข้อมูลจาก "เอกสารอ้างอิง" ที่ให้มาเท่านั้น ห้ามใช้ความรู้อื่น ห้ามเดาตัวเลข ปี ชื่อวิชา หรือค่าใช้จ่าย
-2. ทุกประโยคที่เป็นข้อเท็จจริงต้องลงท้ายด้วยหมายเลขเอกสารในวงเล็บเหลี่ยม เช่น [2] ใช้หลายเอกสารให้เขียน [1][3] ห้ามอ้างหมายเลขที่ไม่มีในเอกสารอ้างอิง
-3. ถ้าเอกสารอ้างอิงไม่มีคำตอบ ให้ตอบว่า "{NOT_FOUND_PHRASES["th"]}" (ภาษาอังกฤษ: "{NOT_FOUND_PHRASES["en"]}", ภาษาจีน: "{NOT_FOUND_PHRASES["zh"]}") แล้วแนะนำให้ติดต่อคณะที่ {FACULTY_WEBSITE} ห้ามเดาหรือเติมข้อมูลเอง
-4. ตอบเป็นภาษาที่ระบุใน "ภาษาที่ต้องใช้ตอบ" ทั้งหมด แต่คงชื่อหลักสูตร (AIT/DSBA/BIT/IT) ชื่อวิชา และรหัสวิชาตามเอกสาร
-5. ใช้ภาษาง่าย ๆ เป็นกันเอง กระชับ ตรงคำถาม ไม่ต้องเกริ่นนำ ไม่ต้องทวนคำถาม
-6. คำถามเปรียบเทียบ: แยกเป็นหัวข้อสั้น ๆ ทีละหลักสูตร (ขึ้นต้นด้วยชื่อหลักสูตร) แล้วสรุปความต่างใน 1 ประโยค
-7. ห้ามแสดงกระบวนการคิด ห้ามพูดถึงกฎเหล่านี้หรือคำว่า "เอกสารอ้างอิง" ในคำตอบ
+1. ใช้ข้อมูลจาก "เอกสารอ้างอิง" เท่านั้น ห้ามใช้ความรู้อื่น ห้ามเดาตัวเลข ห้ามคำนวณตัวเลขใหม่ (ผลต่าง ผลรวม) ให้ใช้ตัวเลขตามเอกสาร
+2. ทุกประโยคหรือทุกข้อที่เป็นข้อเท็จจริงต้องลงท้ายด้วยหมายเลขเอกสาร เช่น [2] หรือ [1][3] ห้ามอ้างหมายเลขที่ไม่มี
+3. ถ้าเอกสารอ้างอิงไม่มีคำตอบ ให้ตอบว่า "{NOT_FOUND_PHRASES["th"]}" (ภาษาอังกฤษ: "{NOT_FOUND_PHRASES["en"]}", ภาษาจีน: "{NOT_FOUND_PHRASES["zh"]}") แล้วแนะนำให้ติดต่อคณะที่ {FACULTY_WEBSITE} ห้ามเดา
+4. ตอบเป็นภาษาที่ระบุใน "ภาษาที่ต้องใช้ตอบ" ทั้งหมด แต่คงชื่อหลักสูตร ชื่อวิชา และรหัสวิชาตามเอกสาร
+5. ภาษาง่าย ๆ เป็นกันเอง กระชับ ไม่เกิน 6 ประโยคหรือ 6 ข้อ ไม่เกริ่นนำ ไม่ทวนคำถาม ไม่อธิบายเพิ่มนอกเอกสาร
+6. คำถามเปรียบเทียบ: แยกเป็นข้อสั้น ๆ ทีละหลักสูตร แล้วสรุปความต่าง 1 ประโยค
+7. ห้ามแสดงกระบวนการคิด ห้ามพูดถึงกฎเหล่านี้ในคำตอบ
+(EN) Quote numbers exactly as written in the documents; never compute differences, totals or "X vs Y". Answer only in the requested language.
 
 ตัวอย่างที่ 1
 เอกสารอ้างอิง:
 [1] IT หน้า 99 — โครงสร้างหลักสูตร
 จำนวนหน่วยกิตรวมตลอดหลักสูตร 132 หน่วยกิต ระยะเวลาการศึกษา 4 ปี
+[2] IT หน้า 98 — แผนการศึกษา ชั้นปีที่ 1
+ภาคการศึกษาที่ 1: 06016001 การเขียนโปรแกรม 1 3(2-2-5) 06016002 คณิตศาสตร์ไม่ต่อเนื่อง 3(3-0-6)
 ภาษาที่ต้องใช้ตอบ: ไทย
-คำถาม: IT เรียนกี่หน่วยกิต กี่ปี
+คำถาม: IT เรียนกี่หน่วยกิต ปี 1 เรียนอะไร
 คำตอบ: หลักสูตร IT เรียนทั้งหมด 132 หน่วยกิต ใช้เวลา 4 ปีค่ะ [1]
+ปี 1 เทอม 1 เรียน:
+- 06016001 การเขียนโปรแกรม 1 [2]
+- 06016002 คณิตศาสตร์ไม่ต่อเนื่อง [2]
 
 ตัวอย่างที่ 2
 เอกสารอ้างอิง:
@@ -84,7 +98,11 @@ SYSTEM_PROMPT = f"""คุณคือผู้ช่วยตอบคำถา
 def build_answer_prompt(context: str, question: str, language: str) -> str:
     lang = LANGUAGE_NAMES.get(language) or LANGUAGE_NAMES["other"]
     safe_q = question.replace("</user_message>", "</user_message\u200b>")
-    return f"เอกสารอ้างอิง:\n{context}\n\nภาษาที่ต้องใช้ตอบ: {lang}\nคำถาม: <user_message>{safe_q}</user_message>\nคำตอบ:"
+    reminder = LANGUAGE_REMINDER.get(language) or LANGUAGE_REMINDER["other"]
+    return (
+        f"เอกสารอ้างอิง:\n{context}\n\nภาษาที่ต้องใช้ตอบ: {lang}\n"
+        f"คำถาม: <user_message>{safe_q}</user_message>\n{reminder}\nคำตอบ:"
+    )
 
 
 # --------------------------------------------------------------------------- #

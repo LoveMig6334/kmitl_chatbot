@@ -102,3 +102,18 @@ def test_get_retriever_env(monkeypatch):
     monkeypatch.setenv("RETRIEVER", "bogus")
     with pytest.raises(RuntimeError, match="Unknown RETRIEVER"):
         get_retriever()
+
+
+def test_colloquial_and_cross_lingual_synonyms(retriever):
+    assert run(retriever.retrieve("AIT ปีแรกเรียนอะไรบ้าง", ["AIT"], k=1))[0].chunk_id == "AIT-p20-c1"
+    assert run(retriever.retrieve("ค่าเทอม DSBA เท่าไหร่", ["DSBA"], k=1))[0].chunk_id == "DSBA-p8-c1"
+    assert run(retriever.retrieve("How many credits does BIT require?", ["BIT"], k=1))[0].chunk_id == "BIT-p10-c1"
+    assert run(retriever.retrieve("DSBA专业总共多少学分?学制几年?", ["DSBA"], k=1))[0].chunk_id == "DSBA-p11-c1"
+
+
+def test_topic_less_comparison_falls_back_to_program_overview(retriever):
+    res = run(retriever.retrieve("AIT กับ DSBA ต่างกันยังไง", ["AIT", "DSBA"], k=6))
+    assert {c.program for c in res} == {"AIT", "DSBA"}
+    assert {"AIT-p3-c1", "AIT-p12-c1", "DSBA-p3-c1", "DSBA-p11-c1"} <= {c.chunk_id for c in res}
+    assert all(c.score == 0.3 for c in res)
+    assert run(retriever.retrieve("ต่างกันยังไง", [], k=6)) == []  # no program, no topic → nothing

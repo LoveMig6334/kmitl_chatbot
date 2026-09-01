@@ -193,10 +193,10 @@ class RagAnswerer:
                 if produced:
                     return
                 log.warning("model %s produced no visible text", model)
-            except (TimeoutError, *_llm_timeout_errors()) as exc:
+            except Exception as exc:  # timeout, connection reset, HTTP error: retry once if nothing was shown yet
                 if produced or i == len(models) - 1:
                     raise
-                log.warning("model %s timed out before the first visible token (%s); retrying with %s", model, exc, models[i + 1])
+                log.warning("model %s failed before the first visible token (%s: %s); retrying with %s", model, type(exc).__name__, exc, models[i + 1])
                 continue
             if i == len(models) - 1:
                 return
@@ -258,7 +258,7 @@ class RagAnswerer:
 
             markers = extract_markers(full)
             cited = [ctx.chunks[n - 1] for n in markers if 1 <= n <= len(ctx.chunks)]
-            is_not_found = any(p in full for p in NOT_FOUND_PHRASE_LIST)
+            is_not_found = any(p in full.lower() for p in NOT_FOUND_PHRASE_LIST)
             citations = [] if (is_not_found and not cited) else [
                 Citation(program=c.program, page=c.page, chunk_id=c.chunk_id, snippet=c.text[:SNIPPET_CHARS])
                 for c in cited
@@ -273,12 +273,3 @@ class RagAnswerer:
         finally:
             if gen is not None and hasattr(gen, "aclose"):
                 await gen.aclose()  # closes the upstream ThaiLLM stream on client disconnect
-
-
-def _llm_timeout_errors() -> tuple[type[BaseException], ...]:
-    try:
-        from openai import APIConnectionError, APITimeoutError
-
-        return (APITimeoutError, APIConnectionError)
-    except ImportError:  # pragma: no cover
-        return (ConnectionError,)

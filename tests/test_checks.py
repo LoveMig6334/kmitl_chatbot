@@ -57,4 +57,5 @@ def test_leakage():
 def test_contains_all_and_any_normalise():
     assert contains_all("เรียน ๑๒๐  หน่วยกิต ใช้เวลา 4 ปี", ["120", "4 ปี"]) == []
     assert contains_all("เรียน 129 หน่วยกิต", ["120", "4 ปี"]) == ["120", "4 ปี"]
+    assert contains_all("ค่าเทอม 32000 บาท", ["32,000"]) == [] and contains_all("ค่าเทอม 32,000 บาท", ["32000"]) == []
     assert contains_any("ไม่พบข้อมูลในเอกสารหลักสูตร ค่ะ", ["ไม่พบข้อมูลในเอกสารหลักสูตร", "not found"]) == ["ไม่พบข้อมูลในเอกสารหลักสูตร"]

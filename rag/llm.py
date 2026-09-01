@@ -45,14 +45,18 @@ _REPLAY_SLICE = 8  # chars per delta when replaying a cached completion
 @dataclass(frozen=True)
 class RagSettings:
     model: str = OPENTHAIGPT  # fact_lookup / descriptive
-    comparison_model: str = PATHUMMA_THINK  # question_kind == comparison
+    # question_kind == comparison.  Default is openthaigpt too: in the answer eval pathumma-think
+    # computed derived numbers ("มากกว่า 9 หน่วยกิต", "62,000 บาท") in 2/2 comparison runs despite
+    # explicit rules, and was ~2x slower.  Set RAG_COMPARISON_MODEL=pathumma-thaillm-qwen3-8b-think-3.0.0
+    # to opt back in; <think> stripping and the first-token fallback are exercised either way.
+    comparison_model: str = OPENTHAIGPT
     fallback_model: str = OPENTHAIGPT  # retried once when the primary times out before any visible token
     rewrite_model: str = OPENTHAIGPT
     timeout_s: float = 30.0  # HTTP connect/read timeout (read = max stall between deltas)
     first_token_timeout_s: float = 45.0  # max wait for the first *visible* token (thinking counts as waiting)
-    max_tokens: int = 700
-    think_max_tokens: int = 2000  # thinking models spend tokens on reasoning first
-    rewrite_max_tokens: int = 120
+    max_tokens: int = 1500  # openthaigpt also emits a <think> block first — leave room for it
+    think_max_tokens: int = 2500  # thinking models spend tokens on reasoning first
+    rewrite_max_tokens: int = 400  # the rewrite model thinks first too
     temperature: float = 0.0
     context_token_budget: int = DEFAULT_CONTEXT_TOKEN_BUDGET
     k: int = 8
@@ -81,13 +85,13 @@ def load_rag_settings(**overrides: object) -> RagSettings:
     env = os.environ
     values: dict[str, object] = {
         "model": env.get("RAG_MODEL", OPENTHAIGPT),
-        "comparison_model": env.get("RAG_COMPARISON_MODEL", PATHUMMA_THINK),
+        "comparison_model": env.get("RAG_COMPARISON_MODEL", OPENTHAIGPT),
         "fallback_model": env.get("RAG_FALLBACK_MODEL", OPENTHAIGPT),
         "rewrite_model": env.get("RAG_REWRITE_MODEL", OPENTHAIGPT),
         "timeout_s": float(env.get("RAG_TIMEOUT_S", "30")),
         "first_token_timeout_s": float(env.get("RAG_FIRST_TOKEN_TIMEOUT_S", "45")),
-        "max_tokens": int(env.get("RAG_MAX_TOKENS", "700")),
-        "think_max_tokens": int(env.get("RAG_THINK_MAX_TOKENS", "2000")),
+        "max_tokens": int(env.get("RAG_MAX_TOKENS", "1500")),
+        "think_max_tokens": int(env.get("RAG_THINK_MAX_TOKENS", "2500")),
         "temperature": float(env.get("RAG_TEMPERATURE", "0")),
         "context_token_budget": int(env.get("CONTEXT_TOKEN_BUDGET", str(DEFAULT_CONTEXT_TOKEN_BUDGET))),
         "k": int(env.get("RETRIEVAL_K", "8")),

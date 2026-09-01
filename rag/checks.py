@@ -22,8 +22,9 @@ def normalize_digits(text: str) -> str:
 
 
 def normalize_text(text: str) -> str:
-    """Digits normalised, whitespace collapsed — used for ``must_contain`` matching."""
-    return re.sub(r"\s+", " ", normalize_digits(text)).strip()
+    """Digits normalised, thousands separators dropped, whitespace collapsed — for ``must_contain`` matching."""
+    text = re.sub(r"(?<=\d),(?=\d{3})", "", normalize_digits(text))
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _canon(num: str) -> str:

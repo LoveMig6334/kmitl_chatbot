@@ -11,11 +11,14 @@ import rag.llm as rag_llm
 from api.answerer import Answerer, AnswerEvent, Turn, get_answerer
 from gatekeeper.schema import GateDecision
 from rag.answerer import RagAnswerer, interleave, needs_rewrite
-from rag.llm import RagSettings
+from rag.llm import PATHUMMA_THINK, RagSettings
 from rag.prompts import NOT_FOUND_PHRASES, SYSTEM_PROMPT
 from rag.retriever import Chunk, FixtureRetriever
 
-SETTINGS = RagSettings(api_key="test", timeout_s=0.5, first_token_timeout_s=0.3, query_rewrite=True, min_score=0.3)
+SETTINGS = RagSettings(
+    api_key="test", timeout_s=0.5, first_token_timeout_s=0.3, query_rewrite=True, min_score=0.3,
+    comparison_model=PATHUMMA_THINK,  # exercise the thinking-model path even though the default is openthaigpt
+)
 
 
 def decision(**kw) -> GateDecision:
@@ -159,6 +162,22 @@ def test_thinking_timeout_falls_back_to_openthaigpt(fake, retriever):
     assert [c["model"] for c in llm.calls] == [SETTINGS.comparison_model, SETTINGS.fallback_model]
     assert events[-1].model_used == SETTINGS.fallback_model
     assert llm.closed == 2  # the hung stream was closed
+
+
+def test_connection_error_before_visible_token_falls_back(fake, retriever):
+    llm = fake([RuntimeError("peer closed connection"), ["AIT: 120 [1] DSBA: 129 [2]"]])
+    a = RagAnswerer(retriever=retriever, settings=SETTINGS)
+    d = decision(programs=["AIT", "DSBA"], question_kind="comparison")
+    events = run(collect(a.answer("AIT กับ DSBA เรียนกี่หน่วยกิต", d, None, [])))
+    assert [c["model"] for c in llm.calls] == [SETTINGS.comparison_model, SETTINGS.fallback_model]
+    assert events[-1].model_used == SETTINGS.fallback_model
+
+
+def test_not_found_phrase_is_case_insensitive(fake, retriever):
+    fake([["Not found in the curriculum documents. Please contact the faculty."]])
+    a = RagAnswerer(retriever=retriever, settings=SETTINGS)
+    events = run(collect(a.answer("ทุนการศึกษา AIT ให้กี่บาท", decision(language="en"), None, [])))
+    assert events[-2].citations == []
 
 
 def test_timeout_after_visible_tokens_is_not_retried(fake, retriever):

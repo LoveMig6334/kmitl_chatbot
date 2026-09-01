@@ -65,7 +65,8 @@ SYNONYMS: dict[str, tuple[str, ...]] = {
     "เทอม": ("ภาคการศึกษา",), "ค่าเทอม": ("ค่าธรรมเนียม",), "ค่าเรียน": ("ค่าธรรมเนียม",), "ค่าใช้จ่าย": ("ค่าธรรมเนียม",),
     "ค่า": ("ค่าธรรมเนียม",), "ทำงาน": ("อาชีพ",), "งาน": ("อาชีพ",), "จบ": ("สำเร็จการศึกษา",),
     "สมัคร": ("คุณสมบัติ", "รับสมัคร"), "เกรด": ("gpax",), "สอบเข้า": ("คุณสมบัติ", "tcas"), "รับ": ("รับสมัคร",),
-    "ปี1": ("ชั้นปีที่",), "ปีหนึ่ง": ("ชั้นปีที่",), "เฟรชชี่": ("ชั้นปีที่",), "ตารางเรียน": ("แผนการศึกษา",), "แผนเรียน": ("แผนการศึกษา",),
+    "ปี1": ("ชั้นปีที่",), "แรก": ("ชั้นปีที่", "แผนการศึกษา"), "ปีแรก": ("ชั้นปีที่", "แผนการศึกษา"), "ปี": ("ชั้นปีที่", "ระยะเวลา"),
+    "เวลา": ("ระยะเวลา",), "เวลาเรียน": ("ระยะเวลา",), "นาน": ("ระยะเวลา",), "คะแนน": ("ielts", "toefl", "gpax"), "สอบ": ("ielts", "toefl", "tcas"), "ภาษา": ("ภาษาอังกฤษ", "ielts"), "ปีหนึ่ง": ("ชั้นปีที่",), "เฟรชชี่": ("ชั้นปีที่",), "ตารางเรียน": ("แผนการศึกษา",), "แผนเรียน": ("แผนการศึกษา",),
     "เปิด": ("เปิดสอน",), "เปิดรับ": ("เปิดสอน",), "เริ่ม": ("เปิดสอน",), "ภาษาอังกฤษ": ("ภาษาอังกฤษ", "ielts"), "อินเตอร์": ("นานาชาติ",),
     "credit": ("หน่วยกิต",), "credits": ("หน่วยกิต",), "year": ("ปี",), "years": ("ปี",), "long": ("ระยะเวลา",), "duration": ("ระยะเวลา",),
     "tuition": ("ค่าธรรมเนียม",), "fee": ("ค่าธรรมเนียม",), "fees": ("ค่าธรรมเนียม",), "cost": ("ค่าธรรมเนียม",), "semester": ("ภาคการศึกษา",),
@@ -120,7 +121,7 @@ def tokenize(text: str) -> list[str]:
         if not piece:
             continue
         if _THAI_RE.search(piece):
-            if len(piece) > 1 and piece not in stop:
+            if piece in SYNONYMS or (len(piece) > 1 and piece not in stop):
                 out.append(piece)
         elif _CJK_RE.search(piece):
             # newmm does not segment Chinese: emit every known CJK key found in the run
@@ -166,8 +167,19 @@ class FixtureRetriever:
         self._idf = {t: math.log(1 + n / d) for t, d in df.items()}
         self._unknown_idf = math.log(1 + n)  # a query term absent from the corpus
 
-    def _weight(self, term: str, alternatives: tuple[str, ...]) -> float:
-        known = [self._idf[t] for t in (term, *alternatives) if t in self._idf]
+    @staticmethod
+    @lru_cache(maxsize=512)
+    def _alt_tokens(alt: str) -> tuple[str, ...]:
+        """A synonym target tokenised like the chunks (newmm splits e.g. แผนการศึกษา → แผน การศึกษา)."""
+        return tuple(tokenize(alt)) or (alt,)
+
+    def _present(self, term: str, terms: set[str]) -> bool:
+        if term in terms:
+            return True
+        return any(all(t in terms for t in self._alt_tokens(a)) for a in SYNONYMS.get(term, ()))
+
+    def _weight(self, term: str) -> float:
+        known = [self._idf[t] for t in (term, *(t for a in SYNONYMS.get(term, ()) for t in self._alt_tokens(a))) if t in self._idf]
         return max(known) if known else self._unknown_idf
 
     def score(self, query_terms: set[str], chunk: Chunk) -> float:
@@ -175,10 +187,9 @@ class FixtureRetriever:
         total = 0.0
         found = 0.0
         for t in query_terms:
-            alts = SYNONYMS.get(t, ())
-            w = self._weight(t, alts)
+            w = self._weight(t)
             total += w
-            if t in terms or any(a in terms for a in alts):
+            if self._present(t, terms):
                 found += w
         return found / total if total > 0 else 0.0
 
@@ -208,7 +219,7 @@ class FixtureRetriever:
             if s > 0:
                 # tie-breaker: how often the query terms (or synonyms) occur in the chunk
                 tf = self._tf[c.chunk_id]
-                hits = sum(tf[t] + sum(tf[a] for a in SYNONYMS.get(t, ())) for t in q)
+                hits = sum(tf[t] + sum(tf[x] for a in SYNONYMS.get(t, ()) for x in self._alt_tokens(a)) for t in q)
                 scored.append((s, hits, c))
         scored.sort(key=lambda sc: (-sc[0], -sc[1], sc[2].program, sc[2].page, sc[2].chunk_id))
         return [c.model_copy(update={"score": round(s, 4)}) for s, _, c in scored[:k]]

@@ -9,6 +9,7 @@ Client config lives in `src/main.py` / `src/thai_llm_kmitl/models.py`
 `openthaigpt-thaillm-8b-instruct-v7.2` (override with `GATEKEEPER_MODEL`).
 
 Specs: `docs/gatekeeper-spec.md` (gatekeeper), `docs/api-contract.md` (HTTP API for the frontend).
+Answer layer (RAG): `rag/` — see the section at the end of this file.
 
 ## Scope
 ONE faculty — **คณะเทคโนโลยีสารสนเทศ สจล. / Faculty of Information Technology, KMITL**
@@ -132,3 +133,62 @@ streaming loop in `try/finally` so `aclose()` cancels the upstream request.
 
 API tests (`tests/test_api.py`) use `httpx.AsyncClient` + `ASGITransport` with
 the ThaiLLM call mocked; the disconnect test drives the raw ASGI app.
+
+## Answer layer (`rag/`) — retrieved chunks → streamed, cited answer
+`ANSWERER=rag` makes `api/main.py` use `rag/answerer.py:RagAnswerer`, which
+implements the `Answerer` protocol.  Retrieval is behind a seam:
+
+```python
+# rag/retriever.py — the retrieval teammate implements this (RETRIEVER=qdrant → rag.qdrant_retriever:QdrantRetriever)
+class Chunk(BaseModel):
+    chunk_id: str; program: Literal["AIT","DSBA","BIT","IT"]; page: int
+    heading_path: str; text: str; score: float = 0.0   # score: higher = better, ideally in [0, 1]
+class Retriever(Protocol):
+    name: str
+    async def retrieve(self, query: str, programs: list[str], k: int = 8) -> list[Chunk]: ...  # programs=[] → all
+```
+`FixtureRetriever` (`RETRIEVER=fixture`, default) is keyword overlap over
+`tests/fixtures/chunks.jsonl` — **28 SYNTHETIC passages** (`"synthetic": true`;
+figures are invented).  Drop the real PDFs in `data/raw/*.pdf` and run
+`python scripts/build_fixtures.py` to regenerate from real pages (pymupdf).
+
+Flow (`RagAnswerer.answer`): rewrite → retrieve → no-answer gate → context → model → stream → citations → done.
+1. **Rewrite** (`RAG_QUERY_REWRITE=1`, one openthaigpt call) only when the message is a
+   short/anaphoric follow-up with history, or is not Thai (documents are Thai → translate).
+   Any failure keeps the original message.  Programs are re-resolved from the rewrite with
+   `gatekeeper.rules.resolve_programs` when the gate saw none.
+2. **Retrieve**: `question_kind=comparison` → per-program retrieval, round-robin interleave
+   (fewer than 2 programs named → all four); else one call.  Dedupe by `chunk_id`.
+3. **No-answer gate**: no chunk with `score >= RETRIEVAL_MIN_SCORE` (0.3, calibrated for the
+   fixture retriever — re-tune for Qdrant) → fixed `NOT_FOUND_REPLY[language]`, empty
+   `citations`, no model call.
+4. **Context** (`rag/context.py`): `[n] {program} หน้า {page} — {heading_path}` + text, filled up to
+   `CONTEXT_TOKEN_BUDGET` (4500) estimated tokens — `thai_chars/3 + other_chars/4` (no tokenizer
+   is exposed by the API; deliberately over-estimates).  Lowest score dropped first, input order kept.
+5. **Model**: `RAG_COMPARISON_MODEL` for comparisons, `RAG_MODEL` otherwise — both default to openthaigpt.
+   pathumma-think was the planned comparison model but computed derived numbers (differences) in every
+   eval run, which the grounding check rejects; opt back in with the env var.  **All four ThaiLLM models
+   emit `<think>` blocks** (openthaigpt too), so keep `RAG_MAX_TOKENS` ≥ 1500.  If the primary yields no *visible* token within `RAG_FIRST_TOKEN_TIMEOUT_S`, retry
+   once with `RAG_FALLBACK_MODEL`.  `<think>` is stripped incrementally (`rag/streaming.py`),
+   even when the tag is split across deltas; it is never sent to the client.
+6. **Prompt** (`rag/prompts.py`, Thai, ~600 est. tokens, fictional few-shot facts): answer only from
+   the numbered context, every factual sentence ends with `[n]`, say the not-found phrase when the
+   context lacks the answer, reply in `decision.language`, high-school audience, structured comparisons.
+7. **Citations**: only chunks whose `[n]` marker appears in the answer (`snippet` = first 120 chars);
+   an answer containing a not-found phrase with no markers → `[]`.  `done.model_used` = the model
+   that actually answered.
+
+Env: see the "Answer layer" block in `.env.example` (`RAG_*`, `RETRIEVAL_*`, `CONTEXT_TOKEN_BUDGET`).
+
+### Answer eval (deterministic, no LLM judge)
+```
+python scripts/eval_answers.py                 # cached in .cache/eval-answers/
+python scripts/eval_answers.py --no-cache --only cmp-ait-dsba-credits --show-all
+python scripts/eval_answers.py --no-rewrite --model typhoon-s-thaillm-8b-instruct
+```
+Cases: `tests/eval_answers.jsonl` (`id, question, [history], programs, question_kind, language,
+must_contain, must_not_contain, expect_not_found, gold_chunk_ids`).  Checks per case: gate,
+facts, number grounding (every number in the answer must occur in the assembled context),
+citations (non-empty, retrieved, gold hit), not-found behaviour, dominant-script language,
+leakage (`<think>`, dangling `[n]`).  Failures print the answer and the raw model output.
+Pure functions behind the checks live in `rag/checks.py` and are unit-tested.
