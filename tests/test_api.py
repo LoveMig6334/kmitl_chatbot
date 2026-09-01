@@ -268,7 +268,13 @@ def test_get_answerer_selection(monkeypatch):
     monkeypatch.setenv("ANSWERER", "stub")
     assert isinstance(get_answerer(), StubAnswerer)
     monkeypatch.setenv("ANSWERER", "rag")
-    monkeypatch.delitem(__import__("sys").modules, "rag.answerer", raising=False)
+    # simulate the RAG package being absent: the error must name the module and the env var
+    import importlib
+
+    def missing(name, *a, **k):
+        raise ImportError(f"No module named {name!r}")
+
+    monkeypatch.setattr(importlib, "import_module", missing)
     with pytest.raises(RuntimeError) as exc:
         get_answerer()
     assert "rag.answerer" in str(exc.value) and "ANSWERER" in str(exc.value)
