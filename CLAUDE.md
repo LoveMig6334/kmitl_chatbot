@@ -148,7 +148,7 @@ class Retriever(Protocol):
     async def retrieve(self, query: str, programs: list[str], k: int = 8) -> list[Chunk]: ...  # programs=[] → all
 ```
 `FixtureRetriever` (`RETRIEVER=fixture`, default) is keyword overlap over
-`tests/fixtures/chunks.jsonl` — **121 real passages** from the four PDFs in `data/raw/`
+`tests/fixtures/chunks.jsonl` — **120 real passages** from the four PDFs in `data/raw/`
 (gitignored; AIT.pdf→AIT, DSBA.pdf→DSBA, IT_inter2565.pdf→BIT, IT2565.pdf→IT), built by
 `python scripts/build_fixtures.py`.  The PDFs typeset TH Sarabun PSK with repositioned
 vowels/tone marks as private-use codepoints; `scripts/pdf_thai.py` derives a per-file

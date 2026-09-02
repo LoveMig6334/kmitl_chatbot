@@ -14,3 +14,9 @@ wheels/
 
 # Eval LLM response cache
 .cache/
+
+# macOS
+.DS_Store
+
+# Source PDFs (large, not redistributed)
+data/raw/

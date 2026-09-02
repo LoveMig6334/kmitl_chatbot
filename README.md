@@ -18,7 +18,7 @@ Run the API (stub answerer — real event shapes, fake answer, no retrieval):
 
 ```bash
 ANSWERER=stub uv run uvicorn api.main:app --reload      # http://localhost:8000
-ANSWERER=rag RETRIEVER=fixture uv run uvicorn api.main:app --reload   # real answer layer over synthetic fixtures
+ANSWERER=rag RETRIEVER=fixture uv run uvicorn api.main:app --reload   # real answer layer over 120 real curriculum passages (tests/fixtures/chunks.jsonl)
 curl -N localhost:8000/chat -H 'content-type: application/json' \
      -d '{"message": "หลักสูตร AIT เรียนกี่หน่วยกิต"}'
 curl localhost:8000/health
@@ -34,9 +34,21 @@ curl localhost:8000/health
 | `uv run python scripts/eval_gatekeeper.py --level easy --show-all` | one level, print every row |
 | `uv run python scripts/eval_answers.py` | answer layer faithfulness (facts, number grounding, citations, not-found, language, leakage) against `tests/fixtures/chunks.jsonl` |
 
-Cases live in `tests/eval_questions.csv` (tab-separated; see `CLAUDE.md` for the
-columns). `tests/eval_blind.csv`, if present, is a human-written held-out set —
-never open or edit it.
+Cases live in `tests/eval_questions.csv` (gatekeeper, tab-separated) and
+`tests/eval_answers.jsonl` (answer layer); see `CLAUDE.md` for the columns.
+`tests/eval_blind.csv`, if present, is a human-written held-out set — never open or edit it.
+
+## Fixtures
+
+`tests/fixtures/chunks.jsonl` holds real passages extracted from the four curriculum
+PDFs in `data/raw/` (gitignored — obtain them separately). Rebuild and audit with:
+
+```bash
+uv run python scripts/build_fixtures.py      # PDFs -> chunks.jsonl (+ pua_maps.json)
+uv run python scripts/audit_fixtures.py      # 0 suspicious chunks expected
+```
+
+Gold facts hand-checked against the PDFs: `docs/gold-facts.md`.
 
 ## Where the contracts live
 
