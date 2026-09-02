@@ -116,11 +116,13 @@ def clean_page(md: str, boilerplate: set[str]) -> str:
         # เอาแท็ก page_number ออกจากตัวเนื้อ (ดึง label ไปแล้ว)
         cleaned = PAGE_NUM_TAG.sub("", raw).rstrip()
         if cleaned.strip():
-            out_lines.append(cleaned)
+            # normalize ต่อบรรทัด: pythainlp normalize ยุบ "\n\n" เป็น "\n" ถ้าทำทั้งหน้า
+            # → บรรทัดว่างหาย → chunk.py มองทั้งหน้าเป็นย่อหน้าเดียว + page_index ผิด
+            out_lines.append(normalize_thai(cleaned))
     text = "\n".join(out_lines)
     # ยุบบรรทัดว่างซ้อน
     text = re.sub(r"\n{3,}", "\n\n", text).strip()
-    return normalize_thai(text)
+    return text
 
 
 def clean_document(extract_dir: str | Path) -> list[CleanPage]:
