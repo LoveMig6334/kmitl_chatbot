@@ -23,6 +23,14 @@ Examples::
     python scripts/eval_answers.py --only cmp-ait-dsba-credits --show-all
     python scripts/eval_answers.py --model typhoon-s-thaillm-8b-instruct
     python scripts/eval_answers.py --no-rewrite     # skip the follow-up/translation call
+    python scripts/eval_answers.py --retriever chroma --no-cache   # real retriever (python scripts/build_index.py first)
+    python scripts/eval_answers.py --retriever chroma --min-score 0.2 --json .cache/eval-answers/chroma.json
+
+``--retriever chroma`` also reports the **retrieval hit rate** (a gold chunk in the
+retrieved set / in the assembled context) and tags every failing case
+``retrieval-miss`` (no gold chunk reached the context) or ``generation-miss``
+(the gold chunk was in the context, the model still failed).  ``--json`` dumps
+per-case results so two runs (fixture vs chroma) can be compared side by side.
 
 Every failure prints the full answer and the raw model output (``<think>``
 included) so you can see how the 8B model actually fails.
@@ -57,12 +65,13 @@ from rag.checks import (
 )
 from rag.llm import load_rag_settings
 from rag.prompts import is_not_found
-from rag.retriever import FixtureRetriever
+from rag.retriever import FixtureRetriever, Retriever
 
 DEFAULT_CASES = ROOT / "tests" / "eval_answers.jsonl"
 GATE_CACHE_DIR = ROOT / ".cache" / "eval"
 ANSWER_CACHE_DIR = ROOT / ".cache" / "eval-answers"
 CHECKS = ("gate", "facts", "grounding", "citations", "not_found", "language", "leakage")
+HIT_CHECKS = ("hit_retrieved", "hit_context")  # informational: gold chunk reached retrieval / the context
 
 
 def load_cases(path: Path, only: list[str] | None) -> list[dict]:
@@ -199,6 +208,19 @@ def evaluate(result: dict) -> None:
     # leakage
     leaks = leakage_problems(answer, n_chunks)
     checks["leakage"] = (not leaks, "; ".join(leaks))
+    # retrieval hit rate (informational; only for cases with gold ids)
+    gold = set(case["gold_chunk_ids"])
+    if gold:
+        in_ctx = set(dbg.get("context_chunks", []))
+        result["hit_retrieved"] = bool(gold & retrieved)
+        result["hit_context"] = bool(gold & in_ctx)
+    else:
+        result["hit_retrieved"] = result["hit_context"] = None
+    failed_checks = [k for k, v in checks.items() if v[0] is False]
+    if failed_checks:
+        result["miss_kind"] = "retrieval-miss" if (gold and not result["hit_context"]) else "generation-miss"
+    else:
+        result["miss_kind"] = None
 
 
 def pct(n: int, d: int) -> str:
@@ -223,6 +245,15 @@ def report(results: list[dict], *, show_all: bool) -> int:
         print(f"  {name:<12} {len(passed):>3}/{len(applicable):<3} {pct(len(passed), len(applicable))}")
     failed = [r for r in results if any(v[0] is False for v in r["checks"].values())]
     print(f"\nCases fully passing: {len(results) - len(failed)}/{len(results)} {pct(len(results) - len(failed), len(results))}")
+    with_gold = [r for r in results if r.get("hit_retrieved") is not None]
+    if with_gold:
+        hr = sum(1 for r in with_gold if r["hit_retrieved"])
+        hc = sum(1 for r in with_gold if r["hit_context"])
+        print(f"Retrieval hit rate (cases with gold ids): retrieved {hr}/{len(with_gold)} {pct(hr, len(with_gold))}, "
+              f"in context {hc}/{len(with_gold)} {pct(hc, len(with_gold))}")
+    kinds = Counter(r["miss_kind"] for r in failed)
+    if failed:
+        print("Failing cases by kind: " + ", ".join(f"{k}={v}" for k, v in sorted(kinds.items(), key=lambda kv: str(kv[0]))))
     lat = [r["latency_ms"] for r in results]
     print(f"Latency: mean {statistics.mean(lat):.0f} ms, p95 {p95(lat):.0f} ms (gate + answer, cache hits are ~0 ms)")
     print("Models used: " + ", ".join(f"{k or 'none'}={v}" for k, v in sorted(Counter(r.get("model_used") for r in results).items(), key=lambda kv: str(kv[0]))))
@@ -241,7 +272,9 @@ def report(results: list[dict], *, show_all: bool) -> int:
             bad = {k: v for k, v in r["checks"].items() if v[0] is False}
             flag = "OK  " if not bad else "FAIL"
             print("-" * 78)
-            print(f"[{flag}] {case['id']} (line {case['line']}): {case['question']}")
+            tag = f" <{r['miss_kind']}>" if r.get("miss_kind") else ""
+            hit = "" if r.get("hit_retrieved") is None else f" hit(retrieved={r['hit_retrieved']}, context={r['hit_context']})"
+            print(f"[{flag}] {case['id']} (line {case['line']}): {case['question']}{tag}{hit}")
             for k, (_, detail) in bad.items():
                 print(f"       ✗ {k}: {detail}")
             d = r.get("decision")
@@ -276,6 +309,9 @@ def main() -> int:
     ap.add_argument("--concurrency", type=int, default=2)
     ap.add_argument("--show-all", action="store_true")
     ap.add_argument("--strict", action="store_true", help="exit 1 if any case fails")
+    ap.add_argument("--retriever", choices=("fixture", "chroma"), default="fixture",
+                    help="fixture (tests/fixtures/chunks.jsonl) or chroma (vendored hybrid index)")
+    ap.add_argument("--json", type=Path, default=None, help="write per-case results here (for fixture-vs-chroma comparison)")
     args = ap.parse_args()
 
     cases = load_cases(args.cases, args.only)
@@ -290,17 +326,51 @@ def main() -> int:
         cache_dir=None if args.no_cache else str(ANSWER_CACHE_DIR),
         query_rewrite=False if args.no_rewrite else None,
     )
-    answerer = RagAnswerer(retriever=FixtureRetriever(), settings=rag_settings)
+    retriever = make_retriever(args.retriever, args.min_score)
+    if args.retriever == "chroma" and args.min_score is not None:
+        rag_settings = rag_settings.__class__(**{**rag_settings.__dict__, "min_score_chroma": args.min_score})
+    answerer = RagAnswerer(retriever=retriever, settings=rag_settings)
     print(
-        f"Evaluating {len(cases)} cases [model={rag_settings.model} comparison={rag_settings.comparison_model} "
-        f"rewrite={'on' if rag_settings.query_rewrite else 'off'} min_score={rag_settings.min_score} "
+        f"Evaluating {len(cases)} cases [retriever={retriever.name} model={rag_settings.model} comparison={rag_settings.comparison_model} "
+        f"rewrite={'on' if rag_settings.query_rewrite else 'off'} min_score={answerer.min_score} k={rag_settings.k} "
         f"cache={'off' if args.no_cache else rag_settings.cache_dir}]"
     )
     results = asyncio.run(run_all(cases, answerer, gate_settings, args.concurrency))
     for r in results:
         evaluate(r)
     failed = report(results, show_all=args.show_all)
+    if args.json:
+        dump_json(results, args.json, retriever.name)
     return 1 if (args.strict and failed) else 0
+
+
+def make_retriever(kind: str, min_score: float | None) -> Retriever:
+    if kind == "fixture":
+        return FixtureRetriever()
+    from rag.chroma_retriever import ChromaRetriever
+
+    r = ChromaRetriever()
+    started = time.perf_counter()
+    r.warm_up()
+    print(f"chroma retriever loaded in {time.perf_counter() - started:.1f}s", file=sys.stderr)
+    return r
+
+
+def dump_json(results: list[dict], path: Path, retriever_name: str) -> None:
+    rows = []
+    for r in results:
+        rows.append({
+            "id": r["case"]["id"], "question": r["case"]["question"],
+            "checks": {k: v[0] for k, v in r["checks"].items()},
+            "details": {k: v[1] for k, v in r["checks"].items() if v[0] is False},
+            "hit_retrieved": r.get("hit_retrieved"), "hit_context": r.get("hit_context"), "miss_kind": r.get("miss_kind"),
+            "retrieved": (r.get("debug") or {}).get("retrieved"), "context_chunks": (r.get("debug") or {}).get("context_chunks"),
+            "citations": [c.chunk_id for c in r["citations"]], "answer": r["answer"], "model_used": r.get("model_used"),
+            "latency_ms": r["latency_ms"], "error": r.get("error"),
+        })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"retriever": retriever_name, "results": rows}, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"wrote {path}")
 
 
 if __name__ == "__main__":
