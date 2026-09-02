@@ -51,7 +51,9 @@ const dict = {
     saveChanges: "Save changes",
     saved: "Saved",
     demoMode:
-      "Demo mode — connect an AI provider to power chat. Set AI_BASE_URL & AI_API_KEY in .env.",
+      "Demo mode — the FastAPI backend is not reachable. Set FASTAPI_URL in .env.local.",
+    partialRetry: "The answer may be incomplete — retry",
+    sources: "Sources",
   },
   th: {
     newChat: "แชทใหม่",
@@ -103,7 +105,9 @@ const dict = {
     saveChanges: "บันทึกการเปลี่ยนแปลง",
     saved: "บันทึกแล้ว",
     demoMode:
-      "โหมดสาธิต — เชื่อมต่อผู้ให้บริการ AI เพื่อให้แชททำงาน ตั้ง AI_BASE_URL และ AI_API_KEY ใน .env",
+      "โหมดสาธิต — เชื่อมต่อ backend FastAPI ไม่ได้ ตั้งค่า FASTAPI_URL ใน .env.local",
+    partialRetry: "คำตอบอาจไม่สมบูรณ์ — ลองใหม่",
+    sources: "แหล่งอ้างอิง",
   },
 } as const;
 

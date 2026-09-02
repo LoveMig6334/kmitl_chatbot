@@ -2,10 +2,23 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Locale } from "./constants";
 
+/** One retrieved passage the answer cited (shape from docs/api-contract.md). */
+export interface Citation {
+  faculty: string;
+  program: string | null;
+  page: number;
+  chunk_id: string;
+  snippet: string | null;
+}
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** Assistant only: passages cited by the answer; absent for off-topic replies. */
+  citations?: Citation[];
+  /** Assistant only: the backend stream was cut before `done` — offer a retry. */
+  partial?: boolean;
 }
 
 export interface ChatSession {
@@ -44,6 +57,7 @@ interface AppState {
   selectSession: (id: string) => void;
   addMessage: (sessionId: string, msg: Message) => void;
   updateMessage: (sessionId: string, msgId: string, content: string) => void;
+  patchMessage: (sessionId: string, msgId: string, patch: Partial<Omit<Message, "id" | "role">>) => void;
   insertMessageAfter: (sessionId: string, afterId: string, msg: Message) => void;
   deleteMessagesAfter: (sessionId: string, afterId: string) => void;
   deleteSession: (id: string) => void;
@@ -120,6 +134,20 @@ export const useAppStore = create<AppState>()(
                   ...se,
                   messages: se.messages.map((m) =>
                     m.id === msgId ? { ...m, content } : m,
+                  ),
+                }
+              : se,
+          ),
+        })),
+
+      patchMessage: (sessionId, msgId, patch) =>
+        set((s) => ({
+          sessions: s.sessions.map((se) =>
+            se.id === sessionId
+              ? {
+                  ...se,
+                  messages: se.messages.map((m) =>
+                    m.id === msgId ? { ...m, ...patch } : m,
                   ),
                 }
               : se,

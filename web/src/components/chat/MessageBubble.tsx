@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Pencil } from "lucide-react";
+import { Check, Copy, Pencil, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useT } from "@/hooks/useT";
 import type { Message } from "@/lib/store";
+import { Citations } from "./Citations";
 
 interface Props {
   msg: Message;
@@ -12,6 +13,8 @@ interface Props {
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onSaveEdit: (content: string) => void;
+  /** Assistant messages only: re-send the preceding user message. */
+  onRetry?: () => void;
 }
 
 export function MessageBubble({
@@ -20,6 +23,7 @@ export function MessageBubble({
   onStartEdit,
   onCancelEdit,
   onSaveEdit,
+  onRetry,
 }: Props) {
   const t = useT();
   const [draft, setDraft] = useState(msg.content);
@@ -63,6 +67,21 @@ export function MessageBubble({
           >
             {msg.content}
           </div>
+        )}
+
+        {!isUser && msg.citations && msg.citations.length > 0 && (
+          <Citations citations={msg.citations} />
+        )}
+
+        {!isUser && msg.partial && onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="flex items-center gap-1 px-1 text-xs text-muted transition-colors hover:text-foreground"
+          >
+            <RotateCcw className="h-3 w-3" />
+            {t.partialRetry}
+          </button>
         )}
 
         <div className="hidden items-center gap-1 text-xs text-muted group-hover:flex">

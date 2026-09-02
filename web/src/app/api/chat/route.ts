@@ -1,5 +1,6 @@
 import { streamChat } from "@/lib/ai";
 import type { ChatEvent, ChatTurn } from "@/lib/ai";
+import { PROGRAM_IDS as KNOWN_PROGRAMS } from "@/lib/constants";
 
 /**
  * Browser → this route → FastAPI `/chat` (see docs/api-contract.md).
@@ -14,7 +15,7 @@ import type { ChatEvent, ChatTurn } from "@/lib/ai";
  * Aborting the browser request aborts the upstream FastAPI request too.
  */
 
-const PROGRAM_IDS = new Set(["AIT", "DSBA", "BIT", "IT"]);
+const PROGRAM_IDS = new Set<string>(KNOWN_PROGRAMS);
 const MAX_HISTORY = 50; // backend validation limit
 const MAX_TURN_CHARS = 8000;
 const MAX_MESSAGE_CHARS = 4000;

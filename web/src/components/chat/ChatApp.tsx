@@ -21,6 +21,8 @@ export function ChatApp() {
     selectSession,
     addMessage,
     updateMessage,
+    patchMessage,
+    deleteMessagesAfter,
     deleteSession,
     setGenerating,
   } = useAppStore();
@@ -49,15 +51,33 @@ export function ChatApp() {
   async function onSend(text: string) {
     const sessionId = await ensureSession();
     const userMsg: Message = { id: uid("u"), role: "user", content: text };
-    const asstMsg: Message = { id: uid("a"), role: "assistant", content: "" };
     addMessage(sessionId, userMsg);
+    await generate(sessionId, userMsg);
+  }
+
+  /** Re-send the user message that precedes an incomplete assistant answer. */
+  async function onRetry(asstId: string) {
+    if (!active || generating) return;
+    const idx = active.messages.findIndex((m) => m.id === asstId);
+    const userMsg = idx > 0 ? active.messages[idx - 1] : undefined;
+    if (!userMsg || userMsg.role !== "user") return;
+    deleteMessagesAfter(active.id, userMsg.id);
+    await generate(active.id, userMsg);
+  }
+
+  /** Stream the assistant answer for `userMsg` (already in the store) from /api/chat. */
+  async function generate(sessionId: string, userMsg: Message) {
+    const asstMsg: Message = { id: uid("a"), role: "assistant", content: "" };
     setGen(true);
     setGenerating(true);
 
     const controller = new AbortController();
     abortRef.current = controller;
 
-    const history = [...(sessions.find((s) => s.id === sessionId)?.messages ?? []), userMsg];
+    // History = every turn up to and including the user message, read fresh from the store.
+    const stored = useAppStore.getState().sessions.find((s) => s.id === sessionId)?.messages ?? [];
+    const cut = stored.findIndex((m) => m.id === userMsg.id);
+    const history = cut >= 0 ? stored.slice(0, cut + 1) : [...stored, userMsg];
     let acc = "";
     try {
       const res = await fetch("/api/chat", {
@@ -66,6 +86,7 @@ export function ChatApp() {
         body: JSON.stringify({
           messages: history.map((m) => ({ role: m.role, content: m.content })),
           facultyScope,
+          conversationId: sessionId,
         }),
         signal: controller.signal,
       });
@@ -87,11 +108,22 @@ export function ChatApp() {
           if (!line) continue;
           const payload = JSON.parse(line.slice(5).trim());
           if (payload.error) {
-            acc += " [error]";
+            // terminal: keep whatever streamed, surface the message, offer a retry
+            const msg = typeof payload.error === "object" ? payload.error.message : String(payload.error);
+            if (acc === "") updateMessage(sessionId, asstMsg.id, `⚠ ${msg}`);
+            patchMessage(sessionId, asstMsg.id, { partial: true });
             continue;
           }
           if (payload.done) {
+            if (payload.partial) patchMessage(sessionId, asstMsg.id, { partial: true });
             continue;
+          }
+          if (payload.citations) {
+            patchMessage(sessionId, asstMsg.id, { citations: payload.citations });
+            continue;
+          }
+          if (payload.meta) {
+            continue; // gate decision; not shown in the UI yet
           }
           if (payload.delta) {
             acc += payload.delta;
@@ -160,6 +192,7 @@ export function ChatApp() {
                   onStartEdit={() => setEditingId(msg.id)}
                   onCancelEdit={() => setEditingId(null)}
                   onSaveEdit={(c) => onSaveEdit(msg.id, c)}
+                  onRetry={msg.role === "assistant" ? () => onRetry(msg.id) : undefined}
                 />
               ))}
             </div>
