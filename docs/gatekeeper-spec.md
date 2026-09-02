@@ -91,3 +91,24 @@ Also add ~10 harder cases of your own to the same file (mark level `medium`/`har
 5. Add a `CLAUDE.md` section documenting: the competition rule (ThaiLLM-only at runtime), the `GateDecision` contract, how to run the eval, and how to add eval rows.
 
 Deliverables: `gatekeeper/` package, `tests/`, `scripts/eval_gatekeeper.py`, the eval CSV, CLAUDE.md update, and a short summary of eval results with per-category accuracy.
+
+
+---
+
+## Addendum (2026-09-02): `greeting_smalltalk`
+
+Real users greet the bot, thank it and chat casually; refusing those as
+`off_topic_general` was a taxonomy gap.  `GateDecision.category` gained one
+additive value:
+
+| category | meaning | action |
+|---|---|---|
+| `greeting_smalltalk` | greetings (any language, emoji, "55555"), thanks, acknowledgements (โอเค/เข้าใจแล้ว/ครับๆ), farewells, bot-identity questions (คุณคือใคร/ทำอะไรได้บ้าง), vague help openers (ช่วยหน่อย/ถามได้ไหม/อยากรู้เรื่องเรียนต่อ) — **only when the message carries no answerable content** | warm `direct_reply` in the user's language: hello + what the bot does + 2–3 rotating example questions; thanks/farewell get a short friendly close. Never a refusal tone. |
+
+Decision rule: mixed messages ("สวัสดีครับ AIT เรียนกี่ปี") are `in_scope`; vague-but-on-topic
+openers ("อยากรู้เรื่องเรียนต่อที่นี่") are `in_scope` with `programs=[]`; polite service requests
+(ช่วยแปลอังกฤษหน่อย) stay `off_topic_general`; an injection wrapped in a greeting is `injection_or_abuse`.
+Rules catch the common forms with zero API calls (`gatekeeper/smalltalk.py`); anything ambiguous goes
+to the LLM, whose prompt has the new category and two mixed-message few-shots.
+Tuning set: `tests/eval_tuning.jsonl` + `scripts/eval_tuning.py` (see `docs/tuning-taxonomy.md`,
+`docs/reply-rubric.md`).

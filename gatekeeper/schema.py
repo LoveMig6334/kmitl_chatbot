@@ -6,6 +6,12 @@ CONTRACT_VERSION 2 (2026-09-01): the scope is a single faculty (``FACULTY``),
 so the ``faculty`` and ``program`` fields were replaced by ``programs`` — the
 list of in-scope program ids the question names (empty = none named, RAG
 should search all programs; two or more = a comparison).
+
+2026-09-02 (additive, still v2): ``category`` gained ``greeting_smalltalk`` —
+greetings / thanks / acknowledgements / farewells / bot-identity questions and
+vague help openers that carry no answerable content.  Like every non-in_scope
+category it comes with a ``direct_reply`` (a warm welcome, never a refusal), so
+consumers that only branch on ``in_scope`` need no change.
 """
 
 from __future__ import annotations
@@ -23,6 +29,7 @@ Category = Literal[
     "off_topic_other_university",
     "out_of_scope_kmitl",
     "injection_or_abuse",
+    "greeting_smalltalk",
 ]
 Language = Literal["th", "en", "zh", "other"]
 QuestionKind = Literal["fact_lookup", "descriptive", "comparison"]
@@ -35,6 +42,7 @@ CATEGORIES: tuple[str, ...] = (
     "off_topic_other_university",
     "out_of_scope_kmitl",
     "injection_or_abuse",
+    "greeting_smalltalk",
 )
 LANGUAGES: tuple[str, ...] = ("th", "en", "zh", "other")
 QUESTION_KINDS: tuple[str, ...] = ("fact_lookup", "descriptive", "comparison")

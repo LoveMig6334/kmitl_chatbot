@@ -11,16 +11,32 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import zlib
 
 from . import llm as _llm
 from .config import Settings, load_settings
 from .language import detect_language
 from .parsing import LLMVerdict, parse_verdict
 from .replies import build_reply
-from .rules import OTHER_UNIVERSITIES, Metadata, apply_rules, find_other_universities
+from .rules import (
+    OTHER_UNIVERSITIES,
+    Metadata,
+    apply_rules,
+    find_other_universities,
+    smalltalk_kind,
+)
 from .schema import Category, GateDecision, Language
 
 log = logging.getLogger(__name__)
+
+_SMALLTALK_TOPIC_ALIASES = {
+    "greeting": "greeting", "hello": "greeting", "hi": "greeting", "smalltalk": "greeting", "chitchat": "greeting",
+    "thanks": "thanks", "thank": "thanks", "gratitude": "thanks", "appreciation": "thanks",
+    "ack": "ack", "acknowledgement": "ack", "acknowledgment": "ack", "ok": "ack", "okay": "ack",
+    "farewell": "farewell", "bye": "farewell", "goodbye": "farewell",
+    "identity": "identity", "bot": "identity", "bot_identity": "identity", "who": "identity", "capabilities": "identity",
+    "help": "help", "question": "help", "assistance": "help",
+}
 
 
 def _university_info(text: str, verdict_name: str | None) -> tuple[str | None, str | None]:
@@ -51,6 +67,7 @@ def _build_decision(
     topic: str | None = None,
     llm_programs: list[str] | None = None,
     llm_kind: str | None = None,
+    text: str = "",
 ) -> GateDecision:
     in_scope = category == "in_scope"
     programs = meta.programs or list(llm_programs or [])
@@ -65,7 +82,8 @@ def _build_decision(
         course_codes=meta.course_codes if in_scope else [],
         question_kind=kind if in_scope else None,  # type: ignore[arg-type]
         direct_reply=build_reply(
-            category, language, university_name=university_name, admissions_url=admissions_url, topic=topic
+            category, language, university_name=university_name, admissions_url=admissions_url, topic=topic,
+            seed=zlib.crc32(text.encode("utf-8")),
         ),
         confidence=round(confidence, 3),
         decided_by=decided_by,  # type: ignore[arg-type]
@@ -133,7 +151,7 @@ async def gate(
         return _build_decision(
             category=rule.category, language=language, meta=meta, confidence=rule.confidence,
             decided_by="rule", model_used=None, started=started, university_name=uni_name,
-            admissions_url=uni_url, topic=rule.topic,
+            admissions_url=uni_url, topic=rule.topic, text=text,
         )
 
     settings = settings or load_settings()
@@ -159,11 +177,14 @@ async def gate(
     if category == "off_topic_other_university":
         uni_name, uni_url = _university_info(text, verdict.university)
     topic = rule.topic or verdict.topic
+    if category == "greeting_smalltalk":
+        # pick the template from the text itself; the model's free-form topic is only a fallback
+        topic = smalltalk_kind(text) or _SMALLTALK_TOPIC_ALIASES.get(verdict.topic or "", "greeting")
     return _build_decision(
         category=category, language=language, meta=meta,
         confidence=verdict.confidence if verdict.confidence is not None else 0.7,
         decided_by="llm", model_used=model_used, started=started, university_name=uni_name,
-        admissions_url=uni_url, topic=topic, llm_programs=verdict.programs, llm_kind=verdict.question_kind,
+        admissions_url=uni_url, topic=topic, llm_programs=verdict.programs, llm_kind=verdict.question_kind, text=text,
     )
 
 

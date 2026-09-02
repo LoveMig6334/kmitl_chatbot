@@ -1,10 +1,13 @@
-"""Fixed-style refusal / redirect templates, selected by category × language.
+"""Fixed-style refusal / redirect templates, selected by category × language,
+plus the warm ``greeting_smalltalk`` welcome.
 
 Pure functions only.  ``other`` languages fall back to English.  Injection
 replies are deliberately short and never mention internals.
 """
 
 from __future__ import annotations
+
+import re
 
 from .config import (
     FACULTY_NAME_EN,
@@ -14,6 +17,7 @@ from .config import (
     PROGRAMS,
 )
 from .schema import Category, Language
+from .smalltalk import KINDS as SMALLTALK_KINDS
 
 KMITL_SITE = "https://www.kmitl.ac.th"
 KMITL_REG = "https://www.reg.kmitl.ac.th"
@@ -82,6 +86,112 @@ _KMITL_CHANNELS: dict[str, dict[str, str]] = {
 
 def _lang(language: Language) -> str:
     return language if language in ("th", "en", "zh") else "en"
+
+
+# --------------------------------------------------------------------------- #
+# greeting_smalltalk — warm, useful, never a refusal
+# --------------------------------------------------------------------------- #
+# Example questions the bot can actually answer (curriculum documents).  Thai ones
+# are phrased the way a high-school student would type them.
+_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "th": (
+        "AIT เรียนกี่ปี จบแล้วทำงานอะไรได้บ้าง",
+        "DSBA ต้องเรียนคณิตเยอะไหม",
+        "IT ปกติ กับ IT อินเตอร์ (BIT) ต่างกันยังไง",
+        "ปี 1 เทอม 1 ต้องเรียนวิชาอะไรบ้าง",
+        "หลักสูตร IT มีกี่หน่วยกิต",
+        "สมัครเข้า AIT ต้องมีคุณสมบัติอะไรบ้าง",
+        "BIT เรียนเป็นภาษาอังกฤษทั้งหมดไหม",
+        "เรียน DSBA ต้องเขียนโปรแกรมเป็นไหม",
+        "จบ IT แล้วไปทำงานสายไหนได้บ้าง",
+    ),
+    "en": (
+        "How many years is the AIT program?",
+        "What jobs can DSBA graduates do?",
+        "What is the difference between IT and BIT?",
+        "Which courses are in the first semester of IT?",
+        "How many credits is the BIT program?",
+        "What are the admission requirements for AIT?",
+        "Is BIT taught entirely in English?",
+    ),
+    "zh": (
+        "AIT专业要读几年？",
+        "DSBA毕业后能做什么工作？",
+        "IT和BIT有什么区别？",
+        "IT专业第一学期学什么课？",
+        "BIT专业总共多少学分？",
+        "申请AIT需要什么条件？",
+    ),
+}
+_PROGRAMS_TH = ", ".join(p.id for p in PROGRAMS)
+
+
+def _examples(lang: str, n: int, seed: int | None) -> list[str]:
+    pool = _EXAMPLES[lang]
+    start = (seed or 0) % len(pool)
+    return [pool[(start + i) % len(pool)] for i in range(n)]
+
+
+def _quoted(items: list[str], lang: str) -> str:
+    q = [f"“{x}”" for x in items]
+    if lang == "th":
+        return " ".join(q[:-1]) + (" หรือ " if len(q) > 1 else "") + q[-1]
+    if lang == "zh":
+        return "".join(q[:-1]) + ("或" if len(q) > 1 else "") + q[-1]
+    return ", ".join(q[:-1]) + (" or " if len(q) > 1 else "") + q[-1]
+
+
+def smalltalk_reply(language: Language, kind: str | None = "greeting", seed: int | None = None) -> str:
+    """Warm reply for greetings / thanks / ok / bye / who-are-you / vague help openers.
+
+    ``seed`` (e.g. a hash of the message) rotates the example questions so the
+    same message always gets the same reply while different greetings vary.
+    """
+    lang = _lang(language)
+    kind = kind if kind in SMALLTALK_KINDS else "greeting"
+    ex3 = _quoted(_examples(lang, 3, seed), lang)
+    ex2 = _quoted(_examples(lang, 2, seed), lang)
+    if lang == "th":
+        faculty = f"{FACULTY_NAME_TH} สจล."
+        return {
+            "greeting": f"สวัสดีค่ะ 👋 ฉันเป็นผู้ช่วยตอบคำถามเกี่ยวกับหลักสูตรทั้ง 4 สาขาของ{faculty} ({_PROGRAMS_TH}) ค่ะ ลองถามได้เลย เช่น {ex3}",
+            "help": f"ได้เลยค่ะ ถามมาได้เลย ฉันตอบคำถามเกี่ยวกับหลักสูตร 4 สาขาของ{faculty} ({_PROGRAMS_TH}) ได้ค่ะ เช่น {ex3}",
+            "identity": f"ฉันเป็นแชตบอตผู้ช่วยของ{faculty} ค่ะ ตอบคำถามเกี่ยวกับหลักสูตร 4 สาขา ({_PROGRAMS_TH}) ได้ เช่น รายวิชา หน่วยกิต การรับเข้า และอาชีพหลังจบ ลองถามได้เลย เช่น {ex2}",
+            "thanks": f"ยินดีค่ะ 😊 ถ้ามีคำถามเกี่ยวกับหลักสูตรของ{faculty} เพิ่มเติม ถามได้เลยนะคะ",
+            "ack": "ค่ะ 👍 ถ้ามีอะไรอยากถามเพิ่มเกี่ยวกับหลักสูตร ถามได้เลยนะคะ",
+            "farewell": f"ขอบคุณที่แวะมาคุยนะคะ 👋 ถ้าอยากรู้อะไรเกี่ยวกับหลักสูตรของ{faculty} อีก กลับมาถามได้เสมอค่ะ",
+        }[kind]
+    if lang == "zh":
+        faculty = f"先皇技术学院（KMITL）{FACULTY_NAME_ZH}"
+        return {
+            "greeting": f"你好！👋 我可以回答{faculty}四个专业（{_PROGRAMS_TH}）的课程问题。试试问我：{ex3}。",
+            "help": f"当然可以！请直接提问，我负责{faculty}四个专业（{_PROGRAMS_TH}）的课程问题，例如{ex3}。",
+            "identity": f"我是{faculty}的课程助手。我可以回答四个专业（{_PROGRAMS_TH}）的课程、学分、入学和就业问题。例如：{ex2}。",
+            "thanks": f"不客气！😊 如果还有关于{FACULTY_NAME_ZH}课程的问题，随时问我。",
+            "ack": "好的 👍 还有其他课程问题，随时可以问我。",
+            "farewell": f"再见！👋 想了解{FACULTY_NAME_ZH}的课程时，随时回来问我。",
+        }[kind]
+    faculty = f"KMITL's {FACULTY_NAME_EN}"
+    return {
+        "greeting": f"Hi! 👋 I answer questions about the four programs of {faculty} ({_PROGRAMS_TH}). Try something like {ex3}.",
+        "help": f"Of course! Ask away, I cover the four programs of {faculty} ({_PROGRAMS_TH}), for example {ex3}.",
+        "identity": f"I'm the assistant chatbot of {faculty}. I can answer questions about its four B.Sc. programs ({_PROGRAMS_TH}): courses, credits, admission and careers. Try asking {ex2}.",
+        "thanks": f"You're welcome! 😊 If you have any more questions about the {FACULTY_NAME_EN} programs, just ask.",
+        "ack": "Great 👍 Feel free to ask anything else about the programs.",
+        "farewell": f"Bye for now! 👋 Come back any time you want to ask about the {FACULTY_NAME_EN} programs.",
+    }[kind]
+
+
+_QUOTED_RE = re.compile(r"“[^”]*”|\"[^\"]*\"")
+_ABBREV_RE = re.compile(r"สจล\.|B\.Sc\.|Ph\.D\.|M\.Sc\.|e\.g\.|i\.e\.|etc\.|www\.|\.ac\.th|\.com|\.org|\.go\.th|\.or\.th", re.IGNORECASE)
+_SENTENCE_SPLIT_RE = re.compile(r"[.!?。！？]+|\n+|(?:นะคะ|นะครับ|ค่ะ|ครับ|จ้า|นะ)(?=\s|$)")
+
+
+def sentence_count(text: str) -> int:
+    """Rough sentence count used by the reply rubric (quoted examples and abbreviations don't split)."""
+    masked = _ABBREV_RE.sub("X", _QUOTED_RE.sub("X", text))
+    parts = [p for p in _SENTENCE_SPLIT_RE.split(masked) if p and p.strip(" ,;:")]
+    return len(parts)
 
 
 def general_reply(language: Language, topic: str | None = None) -> str:
@@ -154,10 +264,17 @@ def build_reply(
     university_name: str | None = None,
     admissions_url: str | None = None,
     topic: str | None = None,
+    seed: int | None = None,
 ) -> str | None:
-    """Return the direct reply for a non-``in_scope`` category (``None`` for in_scope)."""
+    """Return the direct reply for a non-``in_scope`` category (``None`` for in_scope).
+
+    For ``greeting_smalltalk`` ``topic`` is the smalltalk kind and ``seed``
+    rotates the example questions.
+    """
     if category == "in_scope":
         return None
+    if category == "greeting_smalltalk":
+        return smalltalk_reply(language, topic, seed)
     if category == "off_topic_general":
         return general_reply(language, topic)
     if category == "off_topic_other_university":

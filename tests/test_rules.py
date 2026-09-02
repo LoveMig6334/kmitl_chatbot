@@ -179,4 +179,24 @@ def test_comparison_of_two_programs():
 
 def test_empty_message():
     r = apply_rules("   ")
-    assert r.category == "off_topic_general"
+    assert r.category == "greeting_smalltalk"
+
+
+def test_other_university_with_only_generic_field_names_is_decided_by_rule():
+    # "data science" / "AI" / "IT" are generic field names, not our programs, when another university is the subject
+    for text in (
+        "Does Chulalongkorn offer a data science bachelor's degree?",
+        "จุฬามีสาขา data science ไหม",
+        "มหิดล เปิดสอน AI ไหม",
+        "Thammasat information technology program credits",
+    ):
+        r = apply_rules(text)
+        assert r.category == "off_topic_other_university", (text, r.reason)
+    # a specific program id or KMITL mention still abstains (comparison → LLM)
+    for text in (
+        "DSBA vs Thammasat data science, which has more credits?",
+        "หลักสูตร IT ของ สจล. กับของจุฬา ต่างกันอย่างไร",
+        "AIT กับ วิศวะคอม จุฬา อันไหนดีกว่า",
+    ):
+        r = apply_rules(text)
+        assert r.category is None, (text, r.reason)

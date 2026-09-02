@@ -34,7 +34,8 @@ Receives every message first and either forwards it to RAG or replies directly.
 
 Routing, cheapest first — **rules decide only when near-certain, else abstain**:
 1. `rules.py` — deterministic layer (0 API calls): injection patterns (TH/EN/ZH),
-   other-university names (abstains if our faculty/program/KMITL is also named),
+   pure smalltalk (`smalltalk.py`), other-university names (abstains if our faculty/program/KMITL
+   is also named; a generic field name like "data science" next to another university does not count),
    other KMITL faculties, KMITL logistics topics, obvious everyday topics,
    program aliases, 8-digit course codes.
 2. `llm.py` + `prompts.py` — one ThaiLLM classification call, strict JSON,
@@ -52,7 +53,7 @@ FACULTY = "IT"
 
 class GateDecision(BaseModel):
     category: Literal["in_scope", "off_topic_general", "off_topic_other_university",
-                      "out_of_scope_kmitl", "injection_or_abuse"]
+                      "out_of_scope_kmitl", "injection_or_abuse", "greeting_smalltalk"]
     language: Literal["th", "en", "zh", "other"]
     programs: list[Literal["AIT", "DSBA", "BIT", "IT"]]  # [] = none named -> search all
     course_codes: list[str]      # regex-extracted, e.g. ["06016317"]
@@ -65,6 +66,14 @@ class GateDecision(BaseModel):
     # properties (not serialised): .faculty == "IT", .program (single named program or None)
 ```
 v1 → v2: `faculty` and `program` fields were removed in favour of `programs`.
+2026-09-02 (additive): `greeting_smalltalk` = greetings / thanks / acks / farewells /
+bot-identity questions / vague help openers ("ช่วยหน่อย", "ถามได้ไหม") **with no answerable
+content**. Mixed messages ("สวัสดีครับ AIT เรียนกี่ปี") and vague-but-on-topic openers
+("อยากรู้เรื่องเรียนต่อที่นี่") are `in_scope`. Its `direct_reply` is a warm welcome (what the bot
+does + 2–3 rotating example questions, seeded by the message hash) — never a refusal.
+Rules: `gatekeeper/smalltalk.py` (`detect_smalltalk` = whole message must be content-free after
+stripping emoji/particles/laughter; `smalltalk_kind` picks the template greeting/thanks/ack/
+farewell/identity/help). Web side: add the value to `ChatMeta.category` in `web/src/lib/ai.ts`.
 Entry point: `async def gate(message: str, scope_filter: list[str] | None = None) -> GateDecision`
 (`gatekeeper.gate_sync` for blocking code). `scope_filter` = program ids the
 user ticked; it narrows program resolution and never causes a refusal.
@@ -93,7 +102,8 @@ Append a tab-separated line to `tests/eval_questions.csv`:
 `question<TAB>type<TAB>level<TAB>expected_programs<TAB>expected_kind`. `type` → expected category:
 คำถามเกี่ยวกับคณะ / คำถามภาษา → in_scope; คำถามทั่วไป → off_topic_general;
 คำถามนอกเหนือมหาลัย → off_topic_other_university;
-คำถามนอกเหนือหลักสูตร สจล. → out_of_scope_kmitl; คำถามเจาะระบบ → injection_or_abuse.
+คำถามนอกเหนือหลักสูตร สจล. → out_of_scope_kmitl; คำถามเจาะระบบ → injection_or_abuse;
+คำถามทักทาย → greeting_smalltalk.
 Optional columns: `expected_category` overrides the mapping; `expected_programs`
 is `;`-separated ids (`-` = expect none, blank = don't check); `expected_kind`.
 Levels: easy / medium / hard. Do not copy eval questions into the few-shot prompt.

@@ -45,6 +45,7 @@ TYPE_TO_CATEGORY = {
     "คำถามนอกเหนือมหาลัย": "off_topic_other_university",
     "คำถามนอกเหนือหลักสูตร สจล.": "out_of_scope_kmitl",
     "คำถามเจาะระบบ": "injection_or_abuse",
+    "คำถามทักทาย": "greeting_smalltalk",
 }
 DEFAULT_CSV = ROOT / "tests" / "eval_questions.csv"
 BLIND_CSV = ROOT / "tests" / "eval_blind.csv"
@@ -138,7 +139,7 @@ def report(results: list[dict], *, title: str, show_all: bool, opaque: bool) -> 
         if by_level_total[lvl]:
             print(f"  {lvl:<28} {by_level_correct[lvl]:>3}/{by_level_total[lvl]:<3} {pct(by_level_correct[lvl], by_level_total[lvl])}")
     print()
-    short = {c: c.replace("off_topic_", "ot_").replace("out_of_scope_", "oos_").replace("injection_or_abuse", "inject")[:10] for c in CATEGORIES}
+    short = {c: c.replace("off_topic_", "ot_").replace("out_of_scope_", "oos_").replace("injection_or_abuse", "inject").replace("greeting_smalltalk", "smalltalk")[:10] for c in CATEGORIES}
     print("Confusion (rows = expected, cols = predicted)")
     print(f"  {'':<28}" + "".join(f"{short[c]:>11}" for c in CATEGORIES))
     for exp in CATEGORIES:

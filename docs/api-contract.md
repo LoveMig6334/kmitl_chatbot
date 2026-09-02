@@ -42,7 +42,12 @@ Each event is `event: <name>\ndata: <json>\n\n`. Events arrive **in this order**
 | `done` | `{latency_ms, model_used}` | last event on success |
 | `error` | `{code, message}` | terminates the stream; no `done` follows |
 
-`meta.category` ∈ `in_scope | off_topic_general | off_topic_other_university | out_of_scope_kmitl | injection_or_abuse`.
+`meta.category` ∈ `in_scope | off_topic_general | off_topic_other_university | out_of_scope_kmitl | injection_or_abuse | greeting_smalltalk`.
+`greeting_smalltalk` (added 2026-09-02, additive) = greetings / thanks / "ok" / bye / "who are you" / vague
+"can I ask?" openers with no answerable content.  It behaves like every other non-`in_scope` category —
+the tokens are a fixed reply (a warm welcome with example questions, never a refusal) and no `citations`
+event is sent — so a client that only branches on `in_scope` needs no change.  Frontend: add the value to
+the `ChatMeta.category` union in `web/src/lib/ai.ts`; optionally render it without the "out of scope" styling.
 `meta.language` ∈ `th | en | zh | other` (reply and answer are in this language).
 `meta.programs` is a list (empty = none named); `meta.question_kind` ∈ `fact_lookup | descriptive | comparison | null`.
 `meta.decided_by` ∈ `rule | llm | fallback`.

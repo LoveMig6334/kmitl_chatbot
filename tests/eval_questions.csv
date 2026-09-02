@@ -23,7 +23,7 @@ KMITL มีชมรมอะไรบ้าง งานรับน้อง�
 มจธ. บางมด วิศวะคอมพิวเตอร์ เรียนกี่หน่วยกิต	คำถามนอกเหนือมหาลัย	medium		fact_lookup
 Does Chulalongkorn offer a data science bachelor's degree?	คำถามนอกเหนือมหาลัย	medium		
 ช่วยเขียนโค้ด Python หาค่าเฉลี่ยของ list ให้หน่อย	คำถามทั่วไป	medium		
-你好，今天过得怎么样？	คำถามทั่วไป	medium		
+你好，今天过得怎么样？	คำถามทักทาย	medium	-	
 หลักสูตรลดน้ำหนัก 7 วันทำยังไง	คำถามทั่วไป	hard		
 หลักสูตร IT ของ สจล. กับของจุฬา ต่างกันอย่างไร	คำถามเกี่ยวกับคณะ	hard	IT	comparison
 จบ IT สจล. แล้วไปทำระบบให้หมอในโรงพยาบาลได้ไหม ต้องเรียนวิชาอะไร	คำถามเกี่ยวกับคณะ	hard		
@@ -32,3 +32,25 @@ Does Chulalongkorn offer a data science bachelor's degree?	คำถามนอ
 วิศวะ สจล. รอบ Portfolio รับกี่คน	คำถามนอกเหนือหลักสูตร สจล.	medium		
 หลักสูตร IT อินเตอร์ ค่าเทอมเทอมละเท่าไหร่	คำถามเกี่ยวกับคณะ	medium	BIT	fact_lookup
 Is the BIT program taught entirely in English, and how many credits is it?	คำถามภาษา	medium	BIT	
+สวัสดีครับ	คำถามทักทาย	easy	-	
+หวัดดีจ้าาา 😊	คำถามทักทาย	easy	-	
+Hello!	คำถามทักทาย	easy	-	
+hi there 👋	คำถามทักทาย	easy	-	
+你好	คำถามทักทาย	easy	-	
+👋👋	คำถามทักทาย	easy	-	
+55555	คำถามทักทาย	easy	-	
+ขอบคุณมากครับ	คำถามทักทาย	easy	-	
+thx!	คำถามทักทาย	easy	-	
+谢谢你	คำถามทักทาย	easy	-	
+โอเคครับ เข้าใจแล้ว	คำถามทักทาย	easy	-	
+บ๊ายบาย ไว้คุยใหม่	คำถามทักทาย	easy	-	
+คุณคือใคร ทำอะไรได้บ้าง	คำถามทักทาย	easy	-	
+who am I chatting with?	คำถามทักทาย	medium	-	
+ช่วยหน่อยได้ไหมครับ	คำถามทักทาย	medium	-	
+helo, r u a bot?	คำถามทักทาย	medium	-	
+ขอบคุณน้าา ช่วยได้เยอะเลย 🙏	คำถามทักทาย	medium	-	
+สวัสดีครับ AIT เรียนกี่ปี	คำถามเกี่ยวกับคณะ	medium	AIT	fact_lookup
+hi! what jobs can DSBA graduates do?	คำถามภาษา	medium	DSBA	descriptive
+ขอบคุณค่ะ แล้ว BIT ค่าเทอมเท่าไหร่คะ	คำถามเกี่ยวกับคณะ	medium	BIT	fact_lookup
+你好，请问IT专业要读几年？	คำถามภาษา	medium	IT	fact_lookup
+หวัดดีครับ อยากรู้เรื่องเรียนต่อที่นี่ มีสาขาอะไรบ้าง	คำถามเกี่ยวกับคณะ	hard	-	descriptive

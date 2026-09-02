@@ -33,6 +33,17 @@ _CATEGORY_ALIASES = {
     "abuse": "injection_or_abuse",
     "prompt_injection": "injection_or_abuse",
     "jailbreak": "injection_or_abuse",
+    "greeting": "greeting_smalltalk",
+    "greetings": "greeting_smalltalk",
+    "smalltalk": "greeting_smalltalk",
+    "small_talk": "greeting_smalltalk",
+    "small-talk": "greeting_smalltalk",
+    "chitchat": "greeting_smalltalk",
+    "chit_chat": "greeting_smalltalk",
+    "greeting_or_smalltalk": "greeting_smalltalk",
+    "greeting_small_talk": "greeting_smalltalk",
+    "greeting/smalltalk": "greeting_smalltalk",
+    "social": "greeting_smalltalk",
 }
 _KIND_ALIASES = {
     "fact": "fact_lookup",

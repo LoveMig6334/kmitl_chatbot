@@ -58,6 +58,16 @@ FACULTY_ALIASES: tuple[str, ...] = (
 # a bare/weak "IT" always refers to BIT, never to the IT program.
 INTER_ALIASES: tuple[str, ...] = ("it inter", "ไอทีอินเตอร์", "อินเตอร์", "นานาชาติ", "international", "国际", "inter")
 
+# Generic field names that every university has.  When *another* university is the
+# subject and these are the only in-scope signal, the message is about that
+# university, not about our programs (rule layer decides off_topic_other_university).
+GENERIC_FIELD_ALIASES: tuple[str, ...] = (
+    "data science and business analytics", "business analytics", "data science", "data sci", "ดาต้า", "วิทยาการข้อมูล", "数据科学",
+    "artificial intelligence technology", "artificial intelligence", "ปัญญาประดิษฐ์", "人工智能技术", "人工智能",
+    "business information technology", "information technology", "เทคโนโลยีสารสนเทศ", "商业信息技术", "信息技术",
+    "international", "นานาชาติ", "อินเตอร์", "国际", "inter", "ai", "it", "ไอที", "ds",
+)
+
 # Words that, near a bare "IT"/"ไอที"/"AI", signal a program-level reference.
 PROGRAM_CONTEXT_WORDS: tuple[str, ...] = (
     "สาขา", "หลักสูตร", "ปกติ", "2565", "2566", "program", "programme", "major",

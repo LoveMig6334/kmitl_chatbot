@@ -13,12 +13,16 @@ from dataclasses import dataclass, field
 
 from .config import (
     FACULTY_ALIASES,
+    GENERIC_FIELD_ALIASES,
     INTER_ALIASES,
     OTHER_KMITL_FACULTY_PATTERNS,
     PROGRAM_CONTEXT_WORDS,
     PROGRAMS,
 )
 from .schema import Category, QuestionKind
+from .smalltalk import detect_smalltalk, smalltalk_kind
+
+__all__ = ["smalltalk_kind"]
 
 # --------------------------------------------------------------------------- #
 # Injection / abuse
@@ -182,7 +186,7 @@ _GENERAL_TOPICS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("finance", r"ราคาทอง|ราคาน้ำมัน|หุ้น|บิทคอยน์|bitcoin|\bstock price\b|\bgold price\b|\bexchange rate\b|อัตราแลกเปลี่ยน|金价|股票|汇率"),
         ("sports", r"ผลบอล|ฟุตบอล(คืนนี้|เมื่อคืน|วันนี้)|พรีเมียร์ลีก|\bfootball (score|result|match)\b|\bpremier league\b|\bnba\b|球赛|足球比赛"),
         ("entertainment", r"หนัง(ใหม่|ดีๆ|น่าดู)|ซีรีส์|ซีรี่ย์|ละคร|เพลง(ใหม่|ฮิต)|netflix|\bmovie\b|\bmovies\b|\bseries\b|\bsong\b|电影|电视剧|歌曲"),
-        ("chitchat", r"^\s*(สวัสดี|หวัดดี|ดีจ้า|ดีครับ|ดีค่ะ|hi|hello|hey|สบายดีไหม|how are you|你好|哈喽)\s*[!?.]*\s*$|เล่าเรื่องตลก|\btell me a joke\b|讲个笑话"),
+        ("chitchat", r"เล่าเรื่องตลก|\btell me a joke\b|讲个笑话"),
         ("coding", r"(เขียน|แก้)\s*(โค้ด|code|โปรแกรม)\s*(python|java|javascript|c\+\+|sql|html)|\bwrite (me )?(a |some )?(python|java|javascript|c\+\+|sql|bash) (code|script|function|program)\b|\bfix (my|this) (code|bug|error)\b|\bsegfault\b|\bstack ?overflow\b|写.{0,4}(python|java|代码|程序)"),
         ("health", r"ปวดหัว|ปวดท้อง|เป็นไข้|กินยาอะไร|\bheadache\b|\bmedicine for\b|头疼|感冒"),
         ("travel", r"ที่เที่ยว|เที่ยว(ไหน|ที่ไหน)|จองโรงแรม|ตั๋วเครื่องบิน|\bflight to\b|\bhotel in\b|\btravel to\b|旅游|机票"),
@@ -269,6 +273,22 @@ def mentions_other_kmitl_faculty(text: str) -> bool:
 
 def find_other_universities(text: str) -> list[University]:
     return [u for u in OTHER_UNIVERSITIES if u.pattern.search(text)]
+
+
+_GENERIC_FIELD_RE = re.compile(
+    "|".join(
+        rf"(?<![A-Za-z]){re.escape(a)}(?![A-Za-z])" if a.isascii() else re.escape(a)
+        for a in sorted(GENERIC_FIELD_ALIASES, key=len, reverse=True)
+    ),
+    re.IGNORECASE,
+)
+
+
+def has_specific_scope_signal(text: str) -> bool:
+    """True when our faculty/programs are named *specifically* (ids, Thai names,
+    "คณะไอที", ...) — not merely via a generic field name such as "data science"."""
+    stripped = _GENERIC_FIELD_RE.sub(" ", text)
+    return bool(resolve_programs(stripped)) or mentions_faculty(stripped) or bool(extract_course_codes(text))
 
 
 def has_curriculum_keywords(text: str) -> bool:
@@ -399,12 +419,15 @@ def apply_rules(text: str, scope_filter: list[str] | None = None) -> RuleResult:
     meta = extract_metadata(text, scope_filter)
     stripped = text.strip()
 
-    if not stripped:
-        return RuleResult("off_topic_general", 0.9, "empty message", meta, topic="chitchat")
-
-    # 1. Injection always wins, even when wrapped in a legitimate-looking question.
+    # 1. Injection always wins, even when wrapped in a greeting or a legitimate-looking question.
     if is_injection(stripped):
         return RuleResult("injection_or_abuse", 0.98, "injection pattern", meta)
+
+    # 2. Pure smalltalk (greeting / thanks / ok / bye / who are you / vague help opener):
+    #    the whole message must be content-free, otherwise abstain (mixed → in_scope via the LLM).
+    kind = detect_smalltalk(stripped)
+    if kind is not None:
+        return RuleResult("greeting_smalltalk", 0.95, f"smalltalk: {kind}", Metadata(), topic=kind)
 
     kmitl = mentions_kmitl(stripped)
     others = find_other_universities(stripped)
@@ -414,26 +437,33 @@ def apply_rules(text: str, scope_filter: list[str] | None = None) -> RuleResult:
     gen_topic = find_general_topic(stripped)
     oos_topic = find_out_of_scope_topic(stripped)
 
-    # 2. Another university named, and nothing points at our faculty/programs -> redirect.
+    # 3. Another university named, and nothing points at our faculty/programs -> redirect.
     #    (Comparisons with our programs, or KMITL mentions, abstain to the LLM.)
     if others and not kmitl and not in_scope_signal:
         return RuleResult(
             "off_topic_other_university", 0.95, f"other university: {others[0].key}", meta, university=others[0]
         )
+    #    Generic field names ("data science", "AI", "IT") next to another university are that
+    #    university's programs, not ours.
+    if others and not kmitl and not has_specific_scope_signal(stripped):
+        return RuleResult(
+            "off_topic_other_university", 0.9, f"other university + generic field: {others[0].key}", meta,
+            university=others[0],
+        )
 
-    # 3. Another KMITL faculty named, ours not -> out of scope (KMITL).
+    # 4. Another KMITL faculty named, ours not -> out of scope (KMITL).
     if other_kmitl_faculty and not others and not in_scope_signal:
         return RuleResult("out_of_scope_kmitl", 0.9, "other KMITL faculty", meta, topic="faculty")
 
-    # 4. KMITL logistics that the curriculum documents do not cover.
+    # 5. KMITL logistics that the curriculum documents do not cover.
     if oos_topic and not others and not curriculum and (kmitl or in_scope_signal or not gen_topic):
         return RuleResult("out_of_scope_kmitl", 0.9, f"kmitl logistics: {oos_topic}", meta, topic=oos_topic)
 
-    # 5. Obvious everyday topics with no curriculum signal at all.
+    # 6. Obvious everyday topics with no curriculum signal at all.
     if gen_topic and not kmitl and not in_scope_signal and not curriculum:
         return RuleResult("off_topic_general", 0.9, f"general topic: {gen_topic}", meta, topic=gen_topic)
 
-    # 6. Clear curriculum question about our faculty / a program / a course code.
+    # 7. Clear curriculum question about our faculty / a program / a course code.
     if in_scope_signal and not others and not other_kmitl_faculty and (curriculum or meta.course_codes):
         return RuleResult("in_scope", 0.92, "program/faculty + curriculum keywords", meta)
 
