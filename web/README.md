@@ -18,7 +18,8 @@ Sign up → Create profile → Chat
 - **New chat**, chat history, and rename/delete.
 - **Stop** button to halt generation mid-stream (SSE streaming).
 - **Edit & resend** messages you've already sent.
-- **Faculty scope** selector (checkboxes) injected into the model prompt.
+- **Program scope** selector (AIT / DSBA / BIT / IT) sent to the backend as `scope`.
+- **Citations** under each answer (`{program} หน้า {page}` chips, snippet on click) and a retry link when an answer was cut short.
 
 ### App utilities
 - **Dark / Light** mode toggle.
@@ -56,9 +57,7 @@ Copy `.env.example` to `.env.local` and fill in:
 | ----------------------------- | ---------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`    | Supabase project URL                                 |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon (public) API key                     |
-| `AI_BASE_URL`                 | OpenAI-compatible chat completions endpoint          |
-| `AI_API_KEY`                  | API key for the AI provider                          |
-| `AI_MODEL`                    | Model id (default `gpt-4o-mini`)                     |
+| `FASTAPI_URL`                 | Backend base URL (server-side only, default `http://localhost:8000`) |
 | `NEXT_PUBLIC_APP_URL`         | Public app URL (for auth callbacks)                  |
 
 ### Supabase setup
@@ -68,9 +67,13 @@ Copy `.env.example` to `.env.local` and fill in:
 3. Set the auth callback redirect URL to `${APP_URL}/auth/callback`.
 4. Create a `profiles` table for user data (id, full_name, user_name, degree, faculty, email).
 
-### AI provider
+### Backend
 
-`src/lib/ai.ts` expects an OpenAI-compatible `/chat/completions` endpoint. Set `AI_BASE_URL` (e.g. `https://api.openai.com/v1`) and `AI_API_KEY`. Responses are streamed to the client via Server-Sent Events.
+`src/lib/ai.ts` talks to the FastAPI gatekeeper + RAG backend (`POST ${FASTAPI_URL}/chat`,
+contract in `../docs/api-contract.md`) and `app/api/chat/route.ts` re-streams its events to
+the browser as `data: {...}` lines: `{meta}`, `{delta}`, `{citations}`, `{done, partial}`,
+`{error}`. Run both servers with `../scripts/dev.sh`; if the backend is unreachable the
+route streams a mock reply instead.
 
 ## Scripts
 

@@ -24,6 +24,34 @@ curl -N localhost:8000/chat -H 'content-type: application/json' \
 curl localhost:8000/health
 ```
 
+## Run the full stack locally
+
+Frontend (`web/`, Next.js) → `POST /api/chat` (Next route) → FastAPI `POST /chat` (gate → RAG, SSE).
+
+One command (starts both, Ctrl-C stops both, logs in `.cache/dev/`):
+
+```bash
+scripts/dev.sh                     # ANSWERER=rag RETRIEVER=fixture on :8000, Next.js on :3000
+```
+
+Or two terminals:
+
+```bash
+# terminal A — backend
+ANSWERER=rag RETRIEVER=fixture uv run uvicorn api.main:app --port 8000
+# terminal B — frontend
+cd web && npm install && FASTAPI_URL=http://localhost:8000 npm run dev
+```
+
+Open http://localhost:3000/chat. Frontend env lives in `web/.env.example` (`FASTAPI_URL` is
+server-side only; the app falls back to a mock stream if the backend is down).
+
+Smoke test through the Next.js route (both servers running):
+
+```bash
+uv run python scripts/smoke_web.py      # in-scope (deltas + citations + done), off-topic (no citations), abort → backend logs "disconnected"
+```
+
 ## Evals
 
 | command | what it measures |

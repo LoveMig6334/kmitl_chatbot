@@ -197,3 +197,16 @@ facts, number grounding (every number in the answer must occur in the assembled 
 citations (non-empty, retrieved, gold hit), not-found behaviour, dominant-script language,
 leakage (`<think>`, dangling `[n]`).  Failures print the answer and the raw model output.
 Pure functions behind the checks live in `rag/checks.py` and are unit-tested.
+
+## Frontend (`web/`, Next.js 16) — owned by the frontend teammate
+Browser → `web/src/app/api/chat/route.ts` → `web/src/lib/ai.ts:streamChat` → FastAPI `POST /chat`
+(`FASTAPI_URL`, server-side only, default `http://localhost:8000`).  The route re-emits the
+backend SSE as `data: {…}` lines: `{meta}` / `{delta}` / `{citations}` / `{done, partial}` /
+`{error}`.  `partial` is derived in `ai.ts` (stream ended without `done`) — it is **not** a
+backend event.  Client abort → route aborts the upstream fetch (both `req.signal` and the
+`ReadableStream.cancel` path) → FastAPI logs `status: "disconnected"`.  Backend down → mock
+stream with `meta.mock = true`.  Scope chips send program ids (`PROGRAMS` in `lib/constants.ts`;
+`FACULTIES` is an alias so the untouched components keep working).  Citations live on
+`Message.citations`, rendered by `components/chat/Citations.tsx`.
+Local stack: `scripts/dev.sh` (both servers, logs in `.cache/dev/`); `scripts/smoke_web.py`
+drives the Next route (in-scope, off-topic, abort → checks the FastAPI log for `disconnected`).
