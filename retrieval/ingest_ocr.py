@@ -62,7 +62,7 @@ _client = OpenAI(base_url=OCR_BASE_URL, api_key=OCR_API_KEY)
 
 # render หน้าให้ด้านยาวสุด ~2000px แล้วปล่อยให้ v1.5 resize เหลือ 1800 (คมกว่าการ render เล็ก)
 RENDER_LONGEST_PX = int(os.getenv("OCR_RENDER_PX", "2000"))
-EXTRACT_ROOT = Path(os.getenv("OCR_OUT", "data/extracted"))
+EXTRACT_ROOT = Path(os.getenv("OCR_OUT", str(Path(__file__).resolve().parent / "data" / "extracted")))
 
 MAX_RETRY = 3
 

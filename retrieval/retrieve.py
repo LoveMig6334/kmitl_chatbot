@@ -38,13 +38,12 @@ try:
 except Exception:
     pass
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 # ---- config ----
-CHROMA_DIR = os.getenv("CHROMA_DIR", "data/chroma")
+PKG_DIR = Path(__file__).resolve().parent  # retrieval/ package dir (paths default relative to it, env overrides win)
+CHROMA_DIR = os.getenv("CHROMA_DIR", str(PKG_DIR / "data" / "chroma"))
 COLLECTION = os.getenv("CHROMA_COLLECTION", "it_kmitl")
-BM25_PATH = os.getenv("BM25_PATH", "data/bm25.pkl")
-CHUNKS_PATH = os.getenv("CHUNKS_PATH", "data/chunks/all.jsonl")
+BM25_PATH = os.getenv("BM25_PATH", str(PKG_DIR / "data" / "bm25.pkl"))
+CHUNKS_PATH = os.getenv("CHUNKS_PATH", str(PKG_DIR / "data" / "chunks" / "all.jsonl"))
 RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 
 CAND_K = int(os.getenv("RETRIEVE_CAND_K", "20"))   # ดึงมาผสมชั้นละกี่ตัว
@@ -68,7 +67,7 @@ class Hit:
 
 class Retriever:
     def __init__(self, use_rerank: bool = USE_RERANK):
-        from rag.index import load_embedder
+        from retrieval.index import load_embedder
         import chromadb
 
         print("โหลด index...", file=sys.stderr)

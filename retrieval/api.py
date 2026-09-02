@@ -25,12 +25,10 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from rag.retrieve import Retriever, TOP_K
+from retrieval.retrieve import Retriever, TOP_K
 
 # prompt grounded ตาม skill.md — ทีม LLM เอาไปยิง OpenThaiGPT ได้ตรงๆ
 SYSTEM_INSTRUCT = (
@@ -139,5 +137,5 @@ def search(req: SearchRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("rag.api:app", host="0.0.0.0",
+    uvicorn.run("retrieval.api:app", host="0.0.0.0",
                 port=int(os.getenv("PORT", "8000")), reload=False)

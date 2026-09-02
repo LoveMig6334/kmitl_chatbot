@@ -18,13 +18,13 @@ try:
 except Exception:
     pass
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from rag.chunk import build_chunks
+from retrieval.chunk import build_chunks
 
 # ทุกไฟล์เป็นหลักสูตรคณะ IT
 DOC_TYPE = "หลักสูตร"
-EXTRACT_ROOT = Path("data/extracted")
-CHUNK_ROOT = Path("data/chunks")
+PKG_DIR = Path(__file__).resolve().parents[1]  # retrieval/
+EXTRACT_ROOT = PKG_DIR / "data" / "extracted"
+CHUNK_ROOT = PKG_DIR / "data" / "chunks"
 
 
 def main() -> int:

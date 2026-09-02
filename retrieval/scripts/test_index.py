@@ -23,12 +23,12 @@ try:
 except Exception:
     pass
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+PKG_DIR = Path(__file__).resolve().parents[1]  # retrieval/
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
-CHROMA_DIR = os.getenv("CHROMA_DIR", "data/chroma")
+CHROMA_DIR = os.getenv("CHROMA_DIR", str(PKG_DIR / "data" / "chroma"))
 COLLECTION = os.getenv("CHROMA_COLLECTION", "it_kmitl")
-BM25_PATH = os.getenv("BM25_PATH", "data/bm25.pkl")
+BM25_PATH = os.getenv("BM25_PATH", str(PKG_DIR / "data" / "bm25.pkl"))
 
 DEFAULT_QUERIES = [
     "ค่าธรรมเนียมการศึกษาเท่าไหร่",
@@ -44,7 +44,7 @@ def main() -> int:
     # โหลดโมเดล + index (ใช้ helper ตัวเดียวกับ index.py)
     import chromadb
     from pythainlp.tokenize import word_tokenize
-    from rag.index import load_embedder
+    from retrieval.index import load_embedder
 
     model = load_embedder()
 

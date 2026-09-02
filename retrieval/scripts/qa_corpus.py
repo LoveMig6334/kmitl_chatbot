@@ -23,9 +23,8 @@ try:
 except Exception:
     pass
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from rag.clean import clean_document
-from rag.chunk import build_chunks
+from retrieval.clean import clean_document
+from retrieval.chunk import build_chunks
 
 HALL_PATTERNS = [r"\+{3,}[^\n]*\+{3,}"]  # +++...+++ เท่านั้น (ไม่จับ C++)
 SHORT_LEN = 50

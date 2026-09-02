@@ -20,3 +20,7 @@ wheels/
 
 # Source PDFs (large, not redistributed)
 data/raw/
+
+# Vendored retrieval pipeline: generated index artifacts (rebuild with scripts/build_index.py)
+retrieval/data/chroma/
+retrieval/data/bm25.pkl

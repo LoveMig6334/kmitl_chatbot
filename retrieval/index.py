@@ -37,10 +37,11 @@ except Exception:
     pass
 
 # ---- config ----
+PKG_DIR = Path(__file__).resolve().parent  # retrieval/ package dir (paths default relative to it, env overrides win)
 EMBED_MODEL = os.getenv("EMBED_MODEL", "BAAI/bge-m3")
-CHROMA_DIR = os.getenv("CHROMA_DIR", "data/chroma")
+CHROMA_DIR = os.getenv("CHROMA_DIR", str(PKG_DIR / "data" / "chroma"))
 COLLECTION = os.getenv("CHROMA_COLLECTION", "it_kmitl")
-BM25_PATH = os.getenv("BM25_PATH", "data/bm25.pkl")
+BM25_PATH = os.getenv("BM25_PATH", str(PKG_DIR / "data" / "bm25.pkl"))
 EMBED_MAX_LEN = int(os.getenv("EMBED_MAX_LEN", "2048"))   # chunk ยาวสุด ~4.6k ตัวอักษร พอ
 EMBED_BATCH = int(os.getenv("EMBED_BATCH", "16"))
 
@@ -142,7 +143,7 @@ def build_bm25_index(chunks: list[dict]) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="สร้าง dense (Chroma) + BM25 index จาก chunks")
-    ap.add_argument("--chunks", default="data/chunks/all.jsonl")
+    ap.add_argument("--chunks", default=str(PKG_DIR / "data" / "chunks" / "all.jsonl"))
     ap.add_argument("--reset", action="store_true", help="ลบ collection เดิมก่อน (สร้างใหม่หมด)")
     ap.add_argument("--skip-dense", action="store_true")
     ap.add_argument("--skip-bm25", action="store_true")

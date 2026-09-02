@@ -27,7 +27,7 @@ except Exception:
 
 from pythainlp.tokenize import word_tokenize
 
-from rag.clean import clean_document, CleanPage
+from retrieval.clean import clean_document, CleanPage
 
 # --- รูปแบบรหัสวิชา ---
 # รหัส 8 หลักขึ้นต้นบรรทัด ตามด้วยชื่อ (รหัสในเล่มนี้ขึ้นต้น 06.. / 90..)
