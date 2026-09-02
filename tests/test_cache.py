@@ -47,3 +47,25 @@ def test_no_cache_dir_means_no_files(tmp_path, monkeypatch):
     monkeypatch.setattr(llm, "request_completion", fake_request)
     asyncio.run(call_classifier("hello", Settings(api_key="x", cache_dir=None)))
     assert list(tmp_path.iterdir()) == []
+
+
+def test_unparsable_responses_are_not_cached(tmp_path, monkeypatch):
+    """A truncated <think> block must not poison the cache: the retry needs a fresh sample."""
+    import asyncio
+
+    from gatekeeper import llm as llm_mod
+    from gatekeeper.config import Settings
+
+    settings = Settings(api_key="x", cache_dir=str(tmp_path))
+    outputs = iter(["<think>still thinking", '{"category": "in_scope"}'])
+
+    async def fake_request(message, settings):
+        return next(outputs)
+
+    monkeypatch.setattr(llm_mod, "request_completion", fake_request)
+    first = asyncio.run(llm_mod.call_classifier("hello", settings))
+    assert first.text.startswith("<think>") and not first.cached
+    second = asyncio.run(llm_mod.call_classifier("hello", settings))
+    assert second.text == '{"category": "in_scope"}' and not second.cached
+    third = asyncio.run(llm_mod.call_classifier("hello", settings))
+    assert third.cached

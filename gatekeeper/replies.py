@@ -62,24 +62,24 @@ _GENERAL_CHANNELS: dict[str, dict[str, str]] = {
 
 _KMITL_CHANNELS: dict[str, dict[str, str]] = {
     "dorm": {
-        "th": "สำนักงานหอพักนักศึกษา สจล. หรือเว็บไซต์สถาบัน",
-        "en": "the KMITL Student Dormitory Office or the institute website",
-        "zh": "先皇技术学院学生宿舍办公室或学院官网",
+        "th": "สำนักงานหอพักนักศึกษา สจล.",
+        "en": "the KMITL Student Dormitory Office",
+        "zh": "先皇技术学院学生宿舍办公室",
     },
     "scholarship": {
-        "th": "สำนักงานกิจการนักศึกษา สจล. หรือเว็บไซต์ของคณะ",
-        "en": "the KMITL Student Affairs Office or the faculty website",
-        "zh": "学生事务办公室或学院官网",
+        "th": "สำนักงานกิจการนักศึกษา สจล.",
+        "en": "the KMITL Student Affairs Office",
+        "zh": "先皇技术学院学生事务办公室",
     },
     "faculty": {
-        "th": "เว็บไซต์ของคณะนั้นโดยตรง หรือสำนักทะเบียนและประมวลผล สจล.",
-        "en": "that faculty's own website or the KMITL Office of the Registrar",
-        "zh": "该学院官网或先皇技术学院注册处",
+        "th": f"เว็บไซต์ของคณะนั้นโดยตรง หรือสำนักทะเบียนและประมวลผล สจล. ({KMITL_REG})",
+        "en": f"that faculty's own website or the KMITL Office of the Registrar ({KMITL_REG})",
+        "zh": f"该学院官网或先皇技术学院注册处（{KMITL_REG}）",
     },
     "default": {
-        "th": "สำนักทะเบียนและประมวลผล สจล.",
-        "en": "the KMITL Office of the Registrar",
-        "zh": "先皇技术学院注册处",
+        "th": f"สำนักทะเบียนและประมวลผล สจล. ({KMITL_REG})",
+        "en": f"the KMITL Office of the Registrar ({KMITL_REG})",
+        "zh": f"先皇技术学院注册处（{KMITL_REG}）",
     },
 }
 
@@ -183,13 +183,14 @@ def smalltalk_reply(language: Language, kind: str | None = "greeting", seed: int
 
 
 _QUOTED_RE = re.compile(r"“[^”]*”|\"[^\"]*\"")
+_URL_RE = re.compile(r"https?://\S+|\b[a-z0-9.-]+\.(?:ac\.th|go\.th|or\.th|com|org|edu|in\.th)\b", re.IGNORECASE)
 _ABBREV_RE = re.compile(r"สจล\.|B\.Sc\.|Ph\.D\.|M\.Sc\.|e\.g\.|i\.e\.|etc\.|www\.|\.ac\.th|\.com|\.org|\.go\.th|\.or\.th", re.IGNORECASE)
 _SENTENCE_SPLIT_RE = re.compile(r"[.!?。！？]+|\n+|(?:นะคะ|นะครับ|ค่ะ|ครับ|จ้า|นะ)(?=\s|$)")
 
 
 def sentence_count(text: str) -> int:
     """Rough sentence count used by the reply rubric (quoted examples and abbreviations don't split)."""
-    masked = _ABBREV_RE.sub("X", _QUOTED_RE.sub("X", text))
+    masked = _ABBREV_RE.sub("X", _URL_RE.sub("X", _QUOTED_RE.sub("X", text)))
     parts = [p for p in _SENTENCE_SPLIT_RE.split(masked) if p and p.strip(" ,;:")]
     return len(parts)
 
@@ -199,7 +200,7 @@ def general_reply(language: Language, topic: str | None = None) -> str:
     channel = _GENERAL_CHANNELS.get(topic or "default", _GENERAL_CHANNELS["default"])[lang]
     if lang == "th":
         base = f"ขออภัยค่ะ ฉันตอบได้เฉพาะคำถามเกี่ยวกับหลักสูตรของ{_FACULTY_LIST_TH} สจล. เท่านั้น"
-        return base + (f" สำหรับเรื่องนี้แนะนำให้ลองใช้{channel}นะคะ" if channel else " หากมีคำถามเกี่ยวกับหลักสูตร ถามได้เลยค่ะ")
+        return base + (f" สำหรับเรื่องนี้แนะนำให้ลองใช้{channel} นะคะ" if channel else " หากมีคำถามเกี่ยวกับหลักสูตร ถามได้เลยค่ะ")
     if lang == "zh":
         base = f"抱歉，我只能回答有关先皇技术学院（KMITL）{_FACULTY_LIST_ZH}课程的问题。"
         return base + (f"关于这个话题，建议您使用{channel}。" if channel else "如有课程相关问题，欢迎提问。")
@@ -207,26 +208,36 @@ def general_reply(language: Language, topic: str | None = None) -> str:
     return base + (f" For this, please try {channel}." if channel else " Feel free to ask about any of those programs.")
 
 
-def other_university_reply(language: Language, university_name: str | None = None, admissions_url: str | None = None) -> str:
+def other_university_reply(
+    language: Language, university_name: str | None = None, admissions_url: str | None = None, *, foreign: bool = False
+) -> str:
+    """``foreign=True`` = not a TCAS university: point to its own site only.  Unknown Thai → TCAS."""
     lang = _lang(language)
-    url = admissions_url or TCAS
+    if not foreign and admissions_url is None:
+        admissions_url = TCAS
     if lang == "th":
         who = university_name or "มหาวิทยาลัยดังกล่าว"
-        return (
-            f"ขออภัยค่ะ ฉันให้ข้อมูลได้เฉพาะหลักสูตรของ{_FACULTY_LIST_TH} สจล. เท่านั้น "
-            f"สำหรับข้อมูลของ{who} แนะนำให้ดูที่เว็บไซต์รับสมัครอย่างเป็นทางการ {url} หรือระบบ TCAS ({TCAS}) นะคะ"
-        )
+        head = f"ขออภัยค่ะ ฉันให้ข้อมูลได้เฉพาะหลักสูตรของ{_FACULTY_LIST_TH} สจล. เท่านั้น "
+        if admissions_url is None:
+            return head + f"สำหรับข้อมูลของ{who} แนะนำให้ดูที่เว็บไซต์รับสมัครอย่างเป็นทางการของมหาวิทยาลัยนั้น นะคะ"
+        if admissions_url == TCAS:
+            return head + f"สำหรับข้อมูลของ{who} แนะนำให้ดูที่ระบบ TCAS ({TCAS}) นะคะ"
+        return head + f"สำหรับข้อมูลของ{who} แนะนำให้ดูที่เว็บไซต์รับสมัครอย่างเป็นทางการ {admissions_url} หรือระบบ TCAS ({TCAS}) นะคะ"
     if lang == "zh":
         who = university_name or "该大学"
-        return (
-            f"抱歉，我只能提供先皇技术学院（KMITL）{_FACULTY_LIST_ZH}的课程信息。"
-            f"关于{who}的信息，请访问其官方招生网站 {url} 或泰国 TCAS 系统（{TCAS}）。"
-        )
+        head = f"抱歉，我只能提供先皇技术学院（KMITL）{_FACULTY_LIST_ZH}的课程信息。"
+        if admissions_url is None:
+            return head + f"关于{who}的信息，请访问该校的官方招生网站。"
+        if admissions_url == TCAS:
+            return head + f"关于{who}的信息，请访问泰国 TCAS 系统（{TCAS}）。"
+        return head + f"关于{who}的信息，请访问其官方招生网站 {admissions_url} 或泰国 TCAS 系统（{TCAS}）。"
     who = university_name or "that university"
-    return (
-        f"Sorry, I only cover the curricula of KMITL's {_FACULTY_LIST_EN}. "
-        f"For {who}, please check its official admissions site at {url} or the TCAS portal ({TCAS})."
-    )
+    head = f"Sorry, I only cover the curricula of KMITL's {_FACULTY_LIST_EN}. "
+    if admissions_url is None:
+        return head + f"For {who}, please check its official admissions website."
+    if admissions_url == TCAS:
+        return head + f"For {who}, please check the TCAS portal ({TCAS})."
+    return head + f"For {who}, please check its official admissions site at {admissions_url} or the TCAS portal ({TCAS})."
 
 
 def kmitl_out_of_scope_reply(language: Language, topic: str | None = None) -> str:
@@ -235,16 +246,16 @@ def kmitl_out_of_scope_reply(language: Language, topic: str | None = None) -> st
     if lang == "th":
         return (
             f"ขออภัยค่ะ เรื่องนี้ไม่อยู่ในเอกสารหลักสูตรที่ฉันมีข้อมูล ฉันตอบได้เฉพาะเรื่องหลักสูตร/รายวิชา/เกณฑ์การรับเข้าของ "
-            f"{_FACULTY_LIST_TH} สจล. เท่านั้น แนะนำให้ติดต่อ{channel} ({KMITL_REG}) หรือเว็บไซต์คณะ {FACULTY_WEBSITE} นะคะ"
+            f"{_FACULTY_LIST_TH} สจล. เท่านั้น แนะนำให้ติดต่อ{channel} หรือดูที่เว็บไซต์คณะ {FACULTY_WEBSITE} นะคะ"
         )
     if lang == "zh":
         return (
             f"抱歉，这个问题不在我掌握的课程文件范围内。我只能回答{_FACULTY_LIST_ZH}的课程、科目和入学要求。"
-            f"建议您联系{channel}（{KMITL_REG}）或访问学院官网 {FACULTY_WEBSITE}。"
+            f"建议您联系{channel}，或访问学院官网 {FACULTY_WEBSITE}。"
         )
     return (
         f"Sorry, that isn't covered by the curriculum documents I have. I can only answer about the programs, courses and admission "
-        f"requirements of KMITL's {_FACULTY_LIST_EN}. Please contact {channel} ({KMITL_REG}) or see {FACULTY_WEBSITE}."
+        f"requirements of KMITL's {_FACULTY_LIST_EN}. Please contact {channel} or see {FACULTY_WEBSITE}."
     )
 
 
@@ -265,6 +276,7 @@ def build_reply(
     admissions_url: str | None = None,
     topic: str | None = None,
     seed: int | None = None,
+    foreign_university: bool = False,
 ) -> str | None:
     """Return the direct reply for a non-``in_scope`` category (``None`` for in_scope).
 
@@ -278,7 +290,7 @@ def build_reply(
     if category == "off_topic_general":
         return general_reply(language, topic)
     if category == "off_topic_other_university":
-        return other_university_reply(language, university_name, admissions_url)
+        return other_university_reply(language, university_name, admissions_url, foreign=foreign_university)
     if category == "out_of_scope_kmitl":
         return kmitl_out_of_scope_reply(language, topic)
     if category == "injection_or_abuse":

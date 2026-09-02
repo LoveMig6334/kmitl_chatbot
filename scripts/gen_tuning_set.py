@@ -618,7 +618,7 @@ INJECTION: list[tuple[str, list[str]]] = [
 AMBIGUOUS: list[tuple[str, list[str], list[str]]] = [
     ("ทดสอบ", ["greeting_smalltalk", "off_topic_general"], ["test_message"]),
     ("เรียนจบแล้วเงินเดือนเท่าไหร่", ["in_scope", "out_of_scope_kmitl"], ["career_salary"]),
-    ("ต้องซื้อโน้ตบุ๊คไหม", ["in_scope", "out_of_scope_kmitl"], ["study_logistics"]),
+    ("ต้องซื้อโน้ตบุ๊คไหม", ["in_scope", "out_of_scope_kmitl", "off_topic_general"], ["study_logistics", "no_kmitl_mention", "label_fix_2"]),
     ("เรียนออนไลน์ได้ไหม", ["in_scope", "out_of_scope_kmitl"], ["study_logistics"]),
     ("TCAS รอบไหนสมัคร สจล. ได้บ้าง", ["in_scope", "out_of_scope_kmitl"], ["tcas", "institute_general"]),
     ("วิศวะคอม ลาดกระบัง ต่างจาก IT ยังไง", ["in_scope", "out_of_scope_kmitl"], ["cross_faculty_comparison"]),

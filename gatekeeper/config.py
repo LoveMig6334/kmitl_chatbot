@@ -66,6 +66,10 @@ GENERIC_FIELD_ALIASES: tuple[str, ...] = (
     "artificial intelligence technology", "artificial intelligence", "ปัญญาประดิษฐ์", "人工智能技术", "人工智能",
     "business information technology", "information technology", "เทคโนโลยีสารสนเทศ", "商业信息技术", "信息技术",
     "international", "นานาชาติ", "อินเตอร์", "国际", "inter", "ai", "it", "ไอที", "ds",
+    # the IT program / IT faculty by generic name: every university has one
+    "สาขาวิชาเทคโนโลยีสารสนเทศ", "สาขาเทคโนโลยีสารสนเทศ", "สาขาไอที", "สาขา it", "หลักสูตร it", "หลักสูตรไอที",
+    "it program", "information technology program", "信息技术专业", "it ปกติ", "ไอทีปกติ", "ไอที ปกติ", "ภาคปกติ",
+    "คณะไอที", "คณะ it", "faculty of information technology", "school of information technology", "信息技术学院", "资讯科技学院",
 )
 
 # Words that, near a bare "IT"/"ไอที"/"AI", signal a program-level reference.
@@ -174,7 +178,7 @@ OTHER_KMITL_FACULTY_PATTERNS: tuple[str, ...] = (
 class Settings:
     model: str = DEFAULT_MODEL
     timeout_s: float = 8.0
-    max_tokens: int = 512
+    max_tokens: int = 1024  # every ThaiLLM model thinks first; 512 truncated ~4% of Thai classifications
     temperature: float = 0.0
     base_url: str = DEFAULT_BASE_URL
     api_key: str | None = None
@@ -194,7 +198,7 @@ def load_settings(**overrides: object) -> Settings:
     values: dict[str, object] = {
         "model": os.environ.get("GATEKEEPER_MODEL", DEFAULT_MODEL),
         "timeout_s": float(os.environ.get("GATEKEEPER_TIMEOUT_S", "8")),
-        "max_tokens": int(os.environ.get("GATEKEEPER_MAX_TOKENS", "512")),
+        "max_tokens": int(os.environ.get("GATEKEEPER_MAX_TOKENS", "1024")),
         "temperature": float(os.environ.get("GATEKEEPER_TEMPERATURE", "0")),
         "base_url": os.environ.get("THAILLM_BASE_URL", DEFAULT_BASE_URL),
         "api_key": os.environ.get("THAILLM_API_KEY"),

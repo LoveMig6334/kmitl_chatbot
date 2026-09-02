@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import USER_AGENT, Settings, load_settings
+from .parsing import parse_verdict
 from .prompts import SYSTEM_PROMPT, build_user_prompt
 
 log = logging.getLogger(__name__)
@@ -117,5 +118,6 @@ async def call_classifier(message: str, settings: Settings | None = None) -> LLM
     if path is not None:
         CACHE_STATS["misses"] += 1
     text = await request_completion(message, settings)
-    _cache_write(path, settings.model, text)
+    if parse_verdict(text) is not None:  # never cache a truncated/unparsable reply: the retry needs a fresh sample
+        _cache_write(path, settings.model, text)
     return LLMResponse(text=text, model=settings.model, attempts=1)

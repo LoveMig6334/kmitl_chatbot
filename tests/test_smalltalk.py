@@ -80,6 +80,19 @@ def test_category_aliases_normalise(raw):
         ("ขอถามหน่อยครับ", "help"),
         ("อยากรู้เรื่องเรียนต่อ", "help"),
         ("can I ask something?", "help"),
+        ("สวัสดีตอนเช้าค่ะ", "greeting"),
+        ("ฮัลโหลลล มีใครอยู่ไหม", "greeting"),
+        ("สวัสดีบอท", "greeting"),
+        ("สวัสดีคร้าบบบ", "greeting"),
+        ("ขอบคุณสำหรับข้อมูลครับ", "thanks"),
+        ("ขอบคุณที่ช่วยตอบนะคะ", "thanks"),
+        ("นี่คุยกับใครอยู่", "identity"),
+        ("ปรึกษาหน่อยได้ไหม", "help"),
+        ("I have a question", "help"),
+        ("thanks a lot", "thanks"),
+        ("请问可以问问题吗", "help"),
+        ("บ๊ายบาย ไว้คุยใหม่", "farewell"),
+        ("helo, r u a bot?", "identity"),
     ],
 )
 def test_pure_smalltalk_is_caught_by_rules(text, kind):
@@ -233,3 +246,10 @@ def test_gate_same_message_gets_same_reply(monkeypatch):
     assert d1.direct_reply == d2.direct_reply
     d3 = run(gate("hi", settings=SETTINGS, use_llm=False))
     assert d3.category == "greeting_smalltalk"
+
+
+def test_how_are_you_is_a_greeting_not_a_farewell():
+    # "สบายดีไหม" contains "บาย" but is not "bye"
+    assert smalltalk_kind("สบายดีไหมครับ") == "greeting"
+    assert apply_rules("สบายดีไหมครับ").topic == "greeting"
+    assert smalltalk_kind("บายครับ") == "farewell"

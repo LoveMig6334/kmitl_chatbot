@@ -83,11 +83,11 @@ class University:
     key: str
     name_th: str
     name_en: str
-    admissions_url: str
+    admissions_url: str | None  # None = unknown / not a TCAS university (foreign)
     pattern: re.Pattern[str]
 
 
-def _u(key: str, th: str, en: str, url: str, pattern: str) -> University:
+def _u(key: str, th: str, en: str, url: str | None, pattern: str) -> University:
     return University(key, th, en, url, re.compile(pattern, re.IGNORECASE))
 
 
@@ -99,7 +99,7 @@ OTHER_UNIVERSITIES: tuple[University, ...] = (
     _u("TU", "มหาวิทยาลัยธรรมศาสตร์", "Thammasat University", "https://www.tuadmissions.in.th",
        r"ธรรมศาสตร์|\bthammasat\b|\bมธ\.?(?![ก-๙])|法政大学"),
     _u("KU", "มหาวิทยาลัยเกษตรศาสตร์", "Kasetsart University", "https://admission.ku.ac.th",
-       r"เกษตรศาสตร์|\bkasetsart\b|(?<![ก-๙])มก\.?(?![ก-๙])|农业大学"),
+       r"เกษตรศาสตร์|\bkasetsart\b|(?<![ก-๙])มก\.?(?![ก-๙])|ม\.?\s?เกษตร|(?<![ก-๙])เกษตร(?![ก-๙])|农业大学"),
     _u("CMU", "มหาวิทยาลัยเชียงใหม่", "Chiang Mai University", "https://www1.reg.cmu.ac.th/ugradapply",
        r"มหาวิทยาลัยเชียงใหม่|ม\.?\s?เชียงใหม่|(?<![ก-๙])มช\.?(?![ก-๙])|chiang\s*mai\s*university|\bcmu\b|清迈大学"),
     _u("KKU", "มหาวิทยาลัยขอนแก่น", "Khon Kaen University", "https://admissions.kku.ac.th",
@@ -142,7 +142,7 @@ OTHER_UNIVERSITIES: tuple[University, ...] = (
        r"สุโขทัยธรรมาธิราช|\bstou\b|(?<![ก-๙])มสธ\.?"),
     _u("SIIT", "SIIT", "Sirindhorn International Institute of Technology", "https://www.siit.tu.ac.th",
        r"\bsiit\b|สิรินธร"),
-    _u("ABROAD", "มหาวิทยาลัยต่างประเทศ", "the university", "https://www.mytcas.com",
+    _u("ABROAD", "", "", None,  # empty names -> generic "that university" wording, no TCAS
        r"\b(mit|stanford|harvard|oxford|cambridge|yale|princeton|berkeley|ucla|caltech|nus|ntu|tsinghua|peking)\b(?=.*\b(university|program|admission|faculty|course|degree|school|major|apply|tuition)\b)"
        r"|(清华|北京大学|北大|复旦|浙江大学|上海交通|新加坡国立|南洋理工|哈佛|斯坦福|麻省理工|牛津|剑桥)"),
 )
@@ -154,12 +154,19 @@ _OUT_OF_SCOPE_KMITL_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
     (topic, re.compile(p, re.IGNORECASE))
     for topic, p in (
         ("dorm", r"หอพัก|หอใน|หอนอก|ที่พัก(นักศึกษา)?|\bdorm(itory|itories|s)?\b|\bhousing\b|宿舍|住宿"),
-        ("transport", r"รถเมล์|รถตู้|รถไฟฟ้า|shuttle|การเดินทางไป|เดินทางมา|ที่จอดรถ|\bparking\b|交通|停车"),
+        ("transport", (
+            r"รถเมล์|รถตู้|รถไฟฟ้า|shuttle|การเดินทางไป|เดินทางมา|เดินทางไป|ที่จอดรถ|\bparking\b|交通|停车"
+            r"|\bhow (do|can|should) (i|we) get to\b|\bdirections? to\b|\b(bus|train|taxi|grab) (to|from)\b|\bairport\b|怎么去|怎么走"
+        )),
         ("food", r"โรงอาหาร|ร้านอาหารใน|\bcanteen\b|\bcafeteria\b|食堂"),
         ("events", r"งานรับน้อง|รับน้อง|กิจกรรมชมรม|ชมรม|คอนเสิร์ต|\bconcert\b|open\s*house|\bevents?\b|活动|社团"),
         ("facilities", r"ห้องสมุด(เปิด|ปิด)|\blibrary (hours|opening)\b|wifi|wi-fi|สนามกีฬา|ฟิตเนส|\bgym\b|โรงยิม|图书馆(开放|几点)"),
         ("staff", r"เบอร์โทร|เบอร์ติดต่อ|โทรศัพท์|phone number|contact number|电话"),
         ("scholarship", r"ทุนการศึกษา|ทุนเรียน|\bscholarships?\b|奖学金"),
+        ("registrar", (
+            r"เกรดออก|ผลการเรียนออก|ประกาศผล|ผลสอบออก|ตารางสอบ|เพิ่มถอน|ถอนวิชา|ดรอปวิชา|ทรานสคริปต์|\btranscripts?\b|ใบรับรอง|ใบเกรด|เช็คเกรด|ดูเกรด"
+            r"|\bgrades? (come|are|be) (out|released|posted)\b|\bwhen (do|will|are) (the )?grades\b|\bexam (schedule|timetable|dates?)\b|\badd[/ -]drop\b|成绩(什么时候|公布)|考试时间表|成绩单"
+        )),
     )
 )
 
@@ -167,7 +174,7 @@ _CURRICULUM_KEYWORDS = re.compile(
     r"หลักสูตร|หน่วยกิต|รายวิชา|วิชา(บังคับ|เลือก|เอก|โท|พื้นฐาน|เฉพาะ|ศึกษาทั่วไป)|แผนการเรียน|โครงสร้างหลักสูตร|สาขา(วิชา)?|ปริญญา|บัณฑิต"
     r"|เกณฑ์การรับ|คุณสมบัติผู้(สมัคร|เข้าศึกษา)|การรับเข้า|รับสมัคร|รอบ(รับ|ที่)|โควตา|portfolio|admission|tcas"
     r"|เปิดสอน|ปีการศึกษา|ภาคการศึกษา|ชั้นปี|จบภายใน|สำเร็จการศึกษา|เรียนกี่ปี|กี่ปี|ค่าธรรมเนียมการศึกษา|ค่าเทอม|ค่าเล่าเรียน"
-    r"|วัตถุประสงค์(ของ)?หลักสูตร|ปรัชญา(ของ)?หลักสูตร|ผลลัพธ์การเรียนรู้|อาชีพ(ที่|หลัง)|สหกิจ|ฝึกงาน|โปรเจค|โครงงาน|ปริญญานิพนธ์"
+    r"|เจนเอ็ด|\bgen[ -]?ed\b|วิชาศึกษาทั่วไป|general education|วัตถุประสงค์(ของ)?หลักสูตร|ปรัชญา(ของ)?หลักสูตร|ผลลัพธ์การเรียนรู้|อาชีพ(ที่|หลัง)|สหกิจ|ฝึกงาน|โปรเจค|โครงงาน|ปริญญานิพนธ์"
     r"|\bcurriculum\b|\bcredits?\b|\bcourses?\b|\bsubjects?\b|\bprogram(me)?s?\b|\bmajors?\b|\bdegree\b|\bbachelor\b|\bmaster\b|\bsyllabus\b|\bprerequisites?\b"
     r"|\bsemesters?\b|\bacademic year\b|\bgraduat(e|ion)\b|\btuition\b|\bstudy plan\b|\bintake\b|\benrol+(ment)?\b|\brequirements?\b|\belective\b|\bcore courses?\b|\binternship\b|\bcapstone\b|\bthesis\b"
     r"|专业|学分|课程|学制|招生|入学|学位|学费|培养|开课|必修|选修|毕业|实习|论文|学院",
@@ -188,7 +195,7 @@ _GENERAL_TOPICS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
         ("entertainment", r"หนัง(ใหม่|ดีๆ|น่าดู)|ซีรีส์|ซีรี่ย์|ละคร|เพลง(ใหม่|ฮิต)|netflix|\bmovie\b|\bmovies\b|\bseries\b|\bsong\b|电影|电视剧|歌曲"),
         ("chitchat", r"เล่าเรื่องตลก|\btell me a joke\b|讲个笑话"),
         ("coding", r"(เขียน|แก้)\s*(โค้ด|code|โปรแกรม)\s*(python|java|javascript|c\+\+|sql|html)|\bwrite (me )?(a |some )?(python|java|javascript|c\+\+|sql|bash) (code|script|function|program)\b|\bfix (my|this) (code|bug|error)\b|\bsegfault\b|\bstack ?overflow\b|写.{0,4}(python|java|代码|程序)"),
-        ("health", r"ปวดหัว|ปวดท้อง|เป็นไข้|กินยาอะไร|\bheadache\b|\bmedicine for\b|头疼|感冒"),
+        ("health", r"ปวดหัว|ปวดท้อง|เป็นไข้|กินยาอะไร|ลดน้ำหนัก|ลดความอ้วน|ออกกำลังกาย|\bheadache\b|\bmedicine for\b|\blose weight\b|\bdiet\b|\bworkout\b|头疼|感冒|减肥"),
         ("travel", r"ที่เที่ยว|เที่ยว(ไหน|ที่ไหน)|จองโรงแรม|ตั๋วเครื่องบิน|\bflight to\b|\bhotel in\b|\btravel to\b|旅游|机票"),
         ("politics", r"นายก(รัฐมนตรี)?(คนปัจจุบัน|คือใคร)|เลือกตั้ง|\bprime minister\b|\belection\b|总理|选举"),
     )
@@ -202,6 +209,17 @@ _GENERAL_TOPICS: tuple[tuple[str, re.Pattern[str]], ...] = tuple(
 COURSE_CODE_PATTERN = re.compile(
     r"(?<![\d-])(\d{8})(?![\d-])"
     r"|(?<![A-Za-z\d])([A-Z]{2,4}\s?-?(?!(?:25|20)\d\d(?!\d))\d{3,4})(?![\d])"
+)
+
+# Very short follow-up fragments that only make sense inside a curriculum conversation
+# ("แล้วรอบ 2 ล่ะ", "กี่บาทนะ", "and BIT?").  The gate has no history, so they are in_scope
+# by the "attempt an answer rather than wrongly refuse" principle.
+_FOLLOWUP_FRAGMENT = re.compile(
+    r"^(?:แล้ว|then|and|what about|how about|\bso\b)?\s*"
+    r"(?:(?:ปี|เทอม|รอบ|ชั้นปี|ภาค)\s*\d|ait|dsba|bit|it|ไอที|อินเตอร์|inter|ทั้งหมด|รวม|"
+    r"กี่(?:บาท|ปี|คน|หน่วยกิต|เทอม|รอบ|วิชา|ตัว|ชั่วโมง)|เท่าไหร่|เท่าไร|ปีไหน|รอบไหน|เมื่อไหร่|เมื่อไร|ตอนไหน|วันไหน)"
+    r"[\sก-๙a-z0-9]{0,12}?\s*(?:ล่ะ|หละ|ละ|นะ|อ่ะ|หรอ|เหรอ|ครับ|คะ|ค่ะ|\?)*\s*$",
+    re.IGNORECASE,
 )
 
 _COMPARISON_PATTERN = re.compile(
@@ -289,6 +307,10 @@ def has_specific_scope_signal(text: str) -> bool:
     "คณะไอที", ...) — not merely via a generic field name such as "data science"."""
     stripped = _GENERIC_FIELD_RE.sub(" ", text)
     return bool(resolve_programs(stripped)) or mentions_faculty(stripped) or bool(extract_course_codes(text))
+
+
+def is_followup_fragment(text: str) -> bool:
+    return len(text) <= 25 and bool(_FOLLOWUP_FRAGMENT.match(text.strip()))
 
 
 def has_curriculum_keywords(text: str) -> bool:
@@ -466,6 +488,10 @@ def apply_rules(text: str, scope_filter: list[str] | None = None) -> RuleResult:
     # 7. Clear curriculum question about our faculty / a program / a course code.
     if in_scope_signal and not others and not other_kmitl_faculty and (curriculum or meta.course_codes):
         return RuleResult("in_scope", 0.92, "program/faculty + curriculum keywords", meta)
+
+    # 8. Bare follow-up fragment with no other signal ("กี่บาทนะ", "แล้วรอบ 2 ล่ะ").
+    if is_followup_fragment(stripped) and not (others or other_kmitl_faculty or gen_topic or oos_topic):
+        return RuleResult("in_scope", 0.7, "follow-up fragment", meta)
 
     return RuleResult(None, 0.0, "no rule fired", meta, university=others[0] if others else None,
                       topic=gen_topic or oos_topic)

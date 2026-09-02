@@ -200,3 +200,39 @@ def test_other_university_with_only_generic_field_names_is_decided_by_rule():
     ):
         r = apply_rules(text)
         assert r.category is None, (text, r.reason)
+
+
+def test_kasetsart_short_forms_are_detected():
+    assert [u.key for u in find_other_universities("ม.เกษตร ศรีราชา มีสาขาไอทีไหม")] == ["KU"]
+    assert [u.key for u in find_other_universities("เกษตร วิทยาการคอมพิวเตอร์ ยากไหม")] == ["KU"]
+    # KMITL's own Faculty of Agricultural Technology is not Kasetsart University
+    assert find_other_universities("คณะเทคโนโลยีการเกษตร สจล. เรียนอะไร") == []
+
+
+def test_generic_it_program_words_next_to_another_university():
+    for text in ("ม.เกษตร ศรีราชา มีสาขาไอทีไหม", "จุฬามีคณะไอทีไหม", "Mahidol IT program tuition"):
+        r = apply_rules(text)
+        assert r.category == "off_topic_other_university", (text, r.reason)
+
+
+def test_registrar_topics_are_out_of_scope_kmitl():
+    for text in ("เกรดออกเมื่อไหร่", "ตารางสอบปลายภาค สจล. ออกหรือยัง", "when do grades come out?", "ขอ transcript ยังไง"):
+        r = apply_rules(text)
+        assert r.category == "out_of_scope_kmitl", (text, r.reason)
+    # max credits per semester is a curriculum regulation -> abstain
+    assert apply_rules("ลงทะเบียนเรียนได้กี่หน่วยกิตต่อเทอม").category != "out_of_scope_kmitl"
+
+
+def test_short_followup_fragments_are_in_scope():
+    for text in ("กี่บาทนะ", "กี่ปีนะ", "แล้วรอบ 2 ล่ะ", "แล้วปี 2 ล่ะ", "เทอม 2 ล่ะ", "ทั้งหมดกี่หน่วยกิต", "and BIT?", "what about DSBA", "เท่าไหร่นะ"):
+        r = apply_rules(text)
+        assert r.category == "in_scope", (text, r.reason)
+    # content that carries its own topic is not a fragment
+    for text in ("แมวกินช็อกโกแลตได้ไหม", "ราคาทองวันนี้เท่าไหร่", "หอในเท่าไหร่", "อันไหนดีกว่า", "กี่บาทนะ ค่าหอพักน่ะ"):
+        assert apply_rules(text).category != "in_scope" or apply_rules(text).reason != "follow-up fragment", text
+
+
+def test_english_transport_and_weight_loss_topics():
+    assert apply_rules("how do I get to KMITL from Suvarnabhumi?").category == "out_of_scope_kmitl"
+    assert apply_rules("อยากลดน้ำหนักทำยังไงดี").category == "off_topic_general"
+    assert apply_rules("how to lose weight fast").category == "off_topic_general"

@@ -32,7 +32,7 @@ _THAI_PARTICLE = (
 _THAI_PARTICLE_TAIL = re.compile(rf"(?:{_THAI_PARTICLE})+$")
 _THAI_PARTICLE_HEAD = re.compile(r"^(?:ครับ|คับ|ค่ะ|คะ|จ้า|เอ่อ|เออ|อ่า|อืม|อือ|เอิ่ม|คือ|คือว่า|แบบว่า|แบบ)+")
 _FILLER_TOKENS = {
-    "please", "pls", "plz", "so", "much", "very", "a", "lot", "lots", "really", "indeed", "alot",
+    "please", "pls", "plz", "so", "much", "very", "lots", "really", "indeed", "alot",
     "sir", "madam", "man", "bro", "dude", "mate", "friend",
     "kub", "krub", "krab", "ka", "kha", "na", "ja", "jaa", "naka", "nakrub", "khrap", "khap",
     "um", "uh", "hmm", "hm", "ah", "oh",
@@ -43,6 +43,7 @@ _FILLER_TOKENS = {
 _LAUGH = re.compile(r"^(?:5{3,}|ฮ่า+|ฮะฮ่า+|ha(?:ha)+h?|he(?:he)+|lol+|lmao|rofl|哈{2,}|嘿嘿|呵呵|555\+)$")
 _REPEAT_LATIN = re.compile(r"([a-z])\1{2,}")  # helloooo -> hello, heyyy -> hey
 _REPEAT_THAI = re.compile(r"([ะาิีึืุูเแโใไๆ])\1+")  # ค่าาา -> ค่า
+_REPEAT_THAI_CONS = re.compile(r"([ก-ฮ])\1{2,}")  # ฮัลโหลลล -> ฮัลโหล, คร้าบบบ -> คร้าบ
 _MAI_YAMOK = re.compile(r"ๆ")
 
 # --------------------------------------------------------------------------- #
@@ -54,24 +55,24 @@ _ACK_WORDS = (
     r"|明白|明白了|知道了|好的|好|好吧|嗯|哦|噢|了解|收到|懂了|行|可以|是的|对"
 )
 _GREETING_WORDS = (
-    r"สวัสดี|สวัดดี|สวัสดิ|หวัดดี|วัดดี|ดีจ้า|ดี|ทักทาย|ฮัลโหล|ฮัลโล|เฮลโล|ฮาย|ไฮ|เฮ้|โย่|มีใครอยู่ไหม|มีใครอยู่มั้ย|มีใครอยู่|ใครอยู่บ้าง|อยู่ไหม|อยู่มั้ย"
+    r"(?:สวัสดี|สวัดดี|สวัสดิ|หวัดดี|วัดดี)(?:ตอนเช้า|ตอนบ่าย|ตอนเย็น|ตอนค่ำ|ยามเช้า|ยามบ่าย|ยามเย็น|บอท|น้องบอท|ทุกคน|ทุกท่าน|จ้า)?|ดีจ้า|ดี|ทักทาย|ฮัลโหล|ฮัลโล|เฮลโล|ฮาย|ไฮ|เฮ้|โย่|มีใครอยู่ไหม|มีใครอยู่มั้ย|มีใครอยู่|ใครอยู่บ้าง|อยู่ไหม|อยู่มั้ย"
     r"|สบายดีไหม|สบายดีมั้ย|สบายดีปะ|สบายดี|เป็นไงบ้าง|เป็นยังไงบ้าง|เป็นไง|กินข้าวยัง|กินข้าวหรือยัง|ทำอะไรอยู่|ว่างไหม|ว่างมั้ย|ตื่นยัง|หลับยัง|ยังอยู่ไหม|ยังอยู่มั้ย|อรุณสวัสดิ์|ราตรีสวัสดิ์|ทดสอบ|เทส|เทสต์|ทดลอง|test|testing|ping"
     r"|(?:hi|hii|hello|helo|hallo|hullo|hey|heya|hiya|yo|greetings|howdy)(?: there| again| all| everyone| guys| bot| friend| you| u| dear)?|good morning|good afternoon|good evening|good day|morning|afternoon|evening|sup|whats up|wassup|wazzup|whatsup|hola|bonjour|namaste|salut|ciao|hej|aloha"
     r"|how are you|how r u|how are u|how are you doing|how are you today|how do you do|hows it going|how is it going|how you doing|hows everything|whats new|anyone there|anybody there|is anyone there|are you there|you there|u there|r u there|are you online|are you awake|still there"
     r"|你好|您好|你们好|嗨|哈喽|哈罗|嘿|早上好|早安|晚上好|晚安|下午好|大家好|喂|哈啰|你好吗|您好吗|最近怎么样|最近好吗|过得怎么样|过得好吗|今天过得怎么样|吃饭了吗|吃了吗|在吗|有人吗|在不在|你在吗"
 )
 _THANKS_WORDS = (
-    r"ขอบคุณ|ขอบใจ|ขอบพระคุณ|แต้งกิ้ว|แต๊งกิ้ว|แต้งค์|แต๊งค์|แต้ง|ขอบคุน|ขอบคุณค่ะ|ขอบคุณครับ"
-    r"|(?:thanks|thank you|thank u|thankyou|thankss|thx|thnx|thanx|tks|ty|tysm|tyvm|cheers|many thanks)(?: again| for that| for the help| for your help| for the info| for the information| for helping| for everything| you| u| bot)?|much appreciated|appreciate it|appreciated"
+    r"(?:ขอบคุณ|ขอบใจ|ขอบพระคุณ|ขอบคุน)(?:สำหรับข้อมูล|สำหรับคำตอบ|สำหรับความช่วยเหลือ|สำหรับคำแนะนำ|ที่ช่วยตอบ|ที่ช่วย|ที่ตอบ|ที่แนะนำ|ที่ให้ข้อมูล|ล่วงหน้า)?|แต้งกิ้ว|แต๊งกิ้ว|แต้งค์|แต๊งค์|แต้ง"
+    r"|(?:thanks|thank you|thank u|thankyou|thankss|thx|thnx|thanx|tks|ty|tysm|tyvm|cheers|many thanks)(?: again| a lot| a million| a bunch| for that| for the help| for your help| for the info| for the information| for helping| for everything| for the answer| in advance| you| u| bot)?|much appreciated|appreciate it|appreciated"
     r"|谢谢|谢了|感谢|多谢|谢啦|谢谢你|谢谢您|非常感谢|太感谢了|感谢你|多谢了"
 )
 _FAREWELL_WORDS = (
-    r"บาย|บ๊ายบาย|บายบาย|บ๊ะบาย|ลาก่อน|ไปก่อน|ไปละ|ไปล่ะ|ไปแล้ว|แค่นี้|แค่นี้ก่อน|พอแค่นี้|พอก่อน|เจอกันใหม่|เจอกัน|ไว้เจอกัน|ฝันดี|นอนละ|นอนก่อน|ไปนอนละ|ขอตัวก่อน|ขอตัว|ไว้คุยใหม่|ไว้มาใหม่|แค่นี้แหละ"
+    r"(?<![ก-๙])บาย(?![ก-๙])|บ๊ายบาย|บายบาย|บ๊ะบาย|ลาก่อน|ไปก่อน|ไปละ|ไปล่ะ|ไปแล้ว|แค่นี้|แค่นี้ก่อน|พอแค่นี้|พอก่อน|เจอกันใหม่|เจอกัน|ไว้เจอกัน|ฝันดี|นอนละ|นอนก่อน|ไปนอนละ|ขอตัวก่อน|ขอตัว|ไว้คุยใหม่|ไว้มาใหม่|แค่นี้แหละ"
     r"|bye|byee|bye bye|byebye|goodbye|good bye|see you|see ya|see u|cya|later|catch you later|talk later|good night|goodnight|gn|gotta go|g2g|im off|i am off|im leaving|take care|thats all|that is all|thats it|done|im done|i am done|nothing else|no more questions"
     r"|再见|拜拜|拜|晚安|回头见|下次见|再会|我走了|先走了|就这样|没了|没有了|没问题了|不用了"
 )
 _IDENTITY_WORDS = (
-    r"คุณคือใคร|คุณเป็นใคร|เธอคือใคร|เธอเป็นใคร|นี่ใคร|นี่คือใคร|คุยกับใคร|คุยกับใครอยู่|กำลังคุยกับใคร|กำลังคุยกับใครอยู่|คุยอยู่กับใคร|คุณชื่ออะไร|เธอชื่ออะไร|ชื่ออะไร|คุณชื่อ|มีชื่อไหม"
+    r"คุณคือใคร|คุณเป็นใคร|เธอคือใคร|เธอเป็นใคร|นี่ใคร|นี่คือใคร|(?:นี่|ตอนนี้)?(?:กำลัง)?คุยกับใคร(?:อยู่)?|คุยกับใครอยู่|กำลังคุยกับใคร|กำลังคุยกับใครอยู่|คุยอยู่กับใคร|คุณชื่ออะไร|เธอชื่ออะไร|ชื่ออะไร|คุณชื่อ|มีชื่อไหม"
     r"|คุณทำอะไรได้|ทำอะไรได้|ทำอะไรได้บ้าง|คุณทำอะไรได้บ้าง|ช่วยอะไรได้บ้าง|คุณช่วยอะไรได้บ้าง|ช่วยอะไรได้|ตอบอะไรได้บ้าง|ตอบอะไรได้|ถามอะไรได้บ้าง|ถามอะไรได้|ถามอะไรได้บ้างคะ|ถามได้แค่ไหน"
     r"|คุณคือบอทใช่ไหม|คุณคือบอทหรือเปล่า|เป็นบอทหรือคน|เป็นคนหรือบอท|บอทหรือคน|คนหรือบอท|คุณเป็นบอทใช่ไหม|เป็นบอทใช่ไหม|เป็นบอทเหรอ|บอทเหรอ|บอทใช่ไหม|คุณเป็น ai ใช่ไหม|เป็น ai ใช่ไหม|เป็น ai เหรอ|คุณเป็น ai หรือเปล่า|คุณเป็นคนไหม|เป็นคนจริงไหม|เป็นคนจริงหรือเปล่า|ตอบอัตโนมัติใช่ไหม"
     r"|who are you|who r u|who are u|who is this|who am i talking to|who am i chatting with|who am i speaking to|what are you|what is this|what is this bot|whats this|what is your name|whats your name|what should i call you|do you have a name"
@@ -80,10 +81,10 @@ _IDENTITY_WORDS = (
     r"|你是谁|你是谁啊|你叫什么|你叫什么名字|你是什么|这是什么|你能做什么|你会做什么|你会什么|你能帮我什么|你能帮什么忙|你可以做什么|你能回答什么|你能回答哪些问题|我能问什么|我可以问什么|你是机器人吗|你是人吗|你是ai吗|你是真人吗|你是人工智能吗|我在跟谁说话|我在和谁聊天"
 )
 _HELP_WORDS = (
-    r"ช่วย|ช่วยหน่อย|ช่วยด้วย|ช่วยที|ช่วย(?:หน่อย|ด้วย|ที)?ได้(?:ไหม|มั้ย|ปะ|ป่ะ|บ้าง)|ขอความช่วยเหลือ|ถามได้ไหม|ถามได้มั้ย|ถามได้ปะ|ถามได้ป่ะ|ถามหน่อย|ขอถามหน่อย|ขอถาม|ขอถามอะไรหน่อย|ขอถามอะไร|มีคำถาม|มีเรื่องอยากถาม|มีเรื่องจะถาม|อยากถาม|อยากถามหน่อย|อยากถามอะไรหน่อย|มีคำถามค่ะ|มีคำถามครับ|มีเรื่องสงสัย|สงสัย"
+    r"ช่วย|ช่วยหน่อย|ช่วยด้วย|ช่วยที|ช่วย(?:หน่อย|ด้วย|ที)?ได้(?:ไหม|มั้ย|ปะ|ป่ะ|บ้าง)|(?:ขอ|อยาก|รบกวน)?(?:ปรึกษา|สอบถาม|ถาม|คุย)(?:หน่อย|อะไรหน่อย|ด้วย|อะไร)?(?:ได้)?(?:ไหม|มั้ย|ปะ|ป่ะ)|ขอความช่วยเหลือ|ถามได้ไหม|ถามได้มั้ย|ถามได้ปะ|ถามได้ป่ะ|ถามหน่อย|ขอถามหน่อย|ขอถาม|ขอถามอะไรหน่อย|ขอถามอะไร|มีคำถาม|มีเรื่องอยากถาม|มีเรื่องจะถาม|อยากถาม|อยากถามหน่อย|อยากถามอะไรหน่อย|มีคำถามค่ะ|มีคำถามครับ|มีเรื่องสงสัย|สงสัย"
     r"|อยากรู้เรื่องเรียนต่อ|อยากรู้เรื่องการเรียนต่อ|อยากรู้เรื่องเรียน|อยากรู้เรื่องการเรียน|อยากรู้|อยากปรึกษา|ขอคำปรึกษาหน่อย|ขอคำปรึกษา|ปรึกษาหน่อย|ปรึกษา|สอบถามหน่อย|ขอสอบถามหน่อย|ขอสอบถาม|สอบถาม|อยากสอบถาม|ขอข้อมูลหน่อย|ขอข้อมูล|อยากได้ข้อมูล|รบกวนหน่อย|รบกวนสอบถาม|รบกวนถาม|รบกวน|ขอคำแนะนำ|ขอคำแนะนำหน่อย|แนะนำหน่อย"
-    r"|help|help me|i need help|need help|can i ask|can i ask something|can i ask a question|can i ask you something|may i ask|may i ask something|may i ask a question|i have a question|i have a few questions|i have some questions|i got a question|question|questions|a question|quick question|i want to ask|i want to ask something|id like to ask|i would like to ask|i d like to ask|need some help|can you help|can you help me|could you help me|can u help|can u help me|could you help|i need some info|i need information|i need some information|any help|help please"
-    r"|我想问|我想问一下|我有个问题|我有问题|我有一个问题|可以问吗|可以问一下吗|能问个问题吗|能问吗|请问|帮帮我|帮我|求助|帮忙|需要帮助|我需要帮助|我想咨询|咨询一下|想咨询|想问一下|问一下|问个问题|请教一下|请教"
+    r"|help|help me|i need help|need help|can i ask|can i ask something|can i ask a question|can i ask you something|may i ask|may i ask something|may i ask a question|i have (?:a |an )?(?:quick |small |little |short )?questions?|i have (?:a few|some|two|2|several) questions|i got (?:a )?question|(?:a |one )?(?:quick |small |little |short )?questions?|i want to ask|i want to ask something|id like to ask|i would like to ask|i d like to ask|need some help|can you help|can you help me|could you help me|can u help|can u help me|could you help|i need some info|i need information|i need some information|any help|help please"
+    r"|我想问|我想问一下|我有个问题|我有问题|我有一个问题|可以问吗|可以问一下吗|能问个问题吗|能问吗|可以问问题吗|能问问题吗|可以问个问题吗|可以提问吗|能提问吗|请问|帮帮我|帮我|求助|帮忙|需要帮助|我需要帮助|我想咨询|咨询一下|想咨询|想问一下|问一下|问个问题|请教一下|请教"
 )
 
 
@@ -149,6 +150,7 @@ def normalize(text: str) -> str:
     t = re.sub(r"5{3,}", " ", t)  # "สวัสดี555" -> "สวัสดี"
     t = _REPEAT_LATIN.sub(r"\1", t)
     t = _REPEAT_THAI.sub(r"\1", t)
+    t = _REPEAT_THAI_CONS.sub(r"\1", t)
     tokens: list[str] = []
     for tok in t.split():
         if _LAUGH.match(tok):

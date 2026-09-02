@@ -39,18 +39,21 @@ _SMALLTALK_TOPIC_ALIASES = {
 }
 
 
-def _university_info(text: str, verdict_name: str | None) -> tuple[str | None, str | None]:
+def _university_info(text: str, verdict_name: str | None) -> tuple[str | None, str | None, bool]:
+    """(display name, admissions url, foreign?) for the other-university redirect."""
     thai = detect_language(text) == "th"
     found = find_other_universities(text)
     if found:
-        return (found[0].name_th if thai else found[0].name_en), found[0].admissions_url
+        u = found[0]
+        return ((u.name_th if thai else u.name_en) or None), u.admissions_url, u.key == "ABROAD"
     if verdict_name:
         lowered = verdict_name.lower()
         for u in OTHER_UNIVERSITIES:
             if u.pattern.search(lowered):
-                return (u.name_th if thai else u.name_en), u.admissions_url
-        return verdict_name, None
-    return None, None
+                return ((u.name_th if thai else u.name_en) or None), u.admissions_url, u.key == "ABROAD"
+        # unmatched Latin-script name from the model: most likely a foreign university
+        return verdict_name, None, verdict_name.isascii()
+    return None, None, False
 
 
 def _build_decision(
@@ -64,6 +67,7 @@ def _build_decision(
     started: float,
     university_name: str | None = None,
     admissions_url: str | None = None,
+    foreign_university: bool = False,
     topic: str | None = None,
     llm_programs: list[str] | None = None,
     llm_kind: str | None = None,
@@ -83,7 +87,7 @@ def _build_decision(
         question_kind=kind if in_scope else None,  # type: ignore[arg-type]
         direct_reply=build_reply(
             category, language, university_name=university_name, admissions_url=admissions_url, topic=topic,
-            seed=zlib.crc32(text.encode("utf-8")),
+            seed=zlib.crc32(text.encode("utf-8")), foreign_university=foreign_university,
         ),
         confidence=round(confidence, 3),
         decided_by=decided_by,  # type: ignore[arg-type]
@@ -144,14 +148,15 @@ async def gate(
         debug["raw_outputs"] = []
 
     if use_rules and rule.category is not None:
-        uni_name, uni_url = (None, None)
+        uni_name, uni_url, foreign = (None, None, False)
         if rule.university is not None:
-            uni_name = rule.university.name_th if language == "th" else rule.university.name_en
+            uni_name = (rule.university.name_th if language == "th" else rule.university.name_en) or None
             uni_url = rule.university.admissions_url
+            foreign = rule.university.key == "ABROAD"
         return _build_decision(
             category=rule.category, language=language, meta=meta, confidence=rule.confidence,
             decided_by="rule", model_used=None, started=started, university_name=uni_name,
-            admissions_url=uni_url, topic=rule.topic, text=text,
+            admissions_url=uni_url, foreign_university=foreign, topic=rule.topic, text=text,
         )
 
     settings = settings or load_settings()
@@ -173,9 +178,9 @@ async def gate(
     # The deterministic detector is more reliable than the model for language.
     if language == "other" and verdict.language in ("th", "en", "zh"):
         language = verdict.language  # type: ignore[assignment]
-    uni_name, uni_url = (None, None)
+    uni_name, uni_url, foreign = (None, None, False)
     if category == "off_topic_other_university":
-        uni_name, uni_url = _university_info(text, verdict.university)
+        uni_name, uni_url, foreign = _university_info(text, verdict.university)
     topic = rule.topic or verdict.topic
     if category == "greeting_smalltalk":
         # pick the template from the text itself; the model's free-form topic is only a fallback
@@ -184,7 +189,8 @@ async def gate(
         category=category, language=language, meta=meta,
         confidence=verdict.confidence if verdict.confidence is not None else 0.7,
         decided_by="llm", model_used=model_used, started=started, university_name=uni_name,
-        admissions_url=uni_url, topic=topic, llm_programs=verdict.programs, llm_kind=verdict.question_kind, text=text,
+        admissions_url=uni_url, foreign_university=foreign, topic=topic, llm_programs=verdict.programs,
+        llm_kind=verdict.question_kind, text=text,
     )
 
 

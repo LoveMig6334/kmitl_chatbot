@@ -150,3 +150,9 @@ def test_debug_dict_populated(monkeypatch):
     run(gate("random musings", settings=SETTINGS, debug=dbg))
     assert dbg["rule_reason"] == "no rule fired"
     assert dbg["raw_outputs"] == ['{"category": "off_topic_general", "language": "en"}']
+
+
+def test_foreign_university_gets_generic_redirect():
+    d = run(gate("Stanford computer science admission requirements", settings=SETTINGS, use_llm=False))
+    assert d.category == "off_topic_other_university" and d.decided_by == "rule"
+    assert "mytcas" not in d.direct_reply and "the university" not in d.direct_reply

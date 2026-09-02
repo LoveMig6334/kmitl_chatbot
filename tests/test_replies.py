@@ -58,3 +58,31 @@ def test_injection_reply_is_short_and_reveals_nothing():
 def test_unknown_category_raises():
     with pytest.raises(ValueError):
         build_reply("weird", "th")  # type: ignore[arg-type]
+
+
+def test_foreign_university_reply_has_no_tcas_and_no_english_name_in_thai_or_chinese():
+    from gatekeeper.replies import other_university_reply
+
+    for lang in ("th", "en", "zh"):
+        r = other_university_reply(lang, university_name=None, admissions_url=None, foreign=True)
+        assert "mytcas" not in r and "the university" not in r, r
+    assert "该大学" in other_university_reply("zh", university_name=None, admissions_url=None, foreign=True)
+    assert "มหาวิทยาลัยดังกล่าว" in other_university_reply("th", university_name=None, admissions_url=None, foreign=True)
+    # an unknown university with no URL still gets the TCAS portal (Thai default)
+    assert "mytcas" in other_university_reply("en", university_name=None, admissions_url=None)
+    # a Thai university keeps its admissions URL and the TCAS portal
+    assert "mytcas" in other_university_reply("en", university_name="Mahidol University", admissions_url="https://tcas.mahidol.ac.th")
+
+
+def test_thai_general_reply_has_a_space_before_the_particle():
+    r = build_reply("off_topic_general", "th", topic="weather")
+    assert ")นะคะ" not in r and " นะคะ" in r
+
+
+def test_kmitl_out_of_scope_reply_labels_urls_correctly():
+    th = build_reply("out_of_scope_kmitl", "th", topic="scholarship")
+    assert "เว็บไซต์ของคณะ (https://www.reg" not in th
+    assert th.count("https://www.it.kmitl.ac.th") == 1
+    en = build_reply("out_of_scope_kmitl", "en", topic="dorm")
+    assert "Dormitory Office" in en and "reg.kmitl.ac.th" not in en and "it.kmitl.ac.th" in en
+    assert "reg.kmitl.ac.th" in build_reply("out_of_scope_kmitl", "en")  # default channel is the registrar
