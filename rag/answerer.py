@@ -105,6 +105,11 @@ class RagAnswerer:
         self.retriever = retriever or get_retriever()
         self.settings = settings or load_rag_settings()
 
+    @property
+    def min_score(self) -> float:
+        """No-answer gate threshold for the active retriever (scores are not comparable across retrievers)."""
+        return self.settings.min_score_chroma if getattr(self.retriever, "name", "") == "chroma" else self.settings.min_score
+
     # ----------------------------------------------------------------- steps --
     async def rewrite_query(self, message: str, history: list[Turn], language: str) -> str:
         if not self.settings.query_rewrite or not needs_rewrite(message, history, language):
@@ -219,7 +224,7 @@ class RagAnswerer:
             query = await self.rewrite_query(message, history, language)
             programs = self.resolve_programs(query, decision, scope)
             chunks = await self.retrieve(query, programs, decision)
-            usable = [c for c in chunks if c.score >= self.settings.min_score]
+            usable = [c for c in chunks if c.score >= self.min_score]
             if debug is not None:
                 debug.update({
                     "query": query, "programs": programs,

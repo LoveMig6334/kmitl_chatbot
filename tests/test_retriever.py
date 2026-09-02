@@ -97,8 +97,10 @@ def test_returned_chunks_are_copies_with_scores(retriever):
 def test_get_retriever_env(monkeypatch):
     monkeypatch.setenv("RETRIEVER", "fixture")
     assert get_retriever().name == "fixture"
+    monkeypatch.setenv("RETRIEVER", "chroma")
+    assert get_retriever().name == "chroma"  # lazy: nothing is loaded until the first retrieve()
     monkeypatch.setenv("RETRIEVER", "qdrant")
-    with pytest.raises(RuntimeError, match="QdrantRetriever"):
+    with pytest.raises(RuntimeError, match="RETRIEVER=chroma"):
         get_retriever()
     monkeypatch.setenv("RETRIEVER", "bogus")
     with pytest.raises(RuntimeError, match="Unknown RETRIEVER"):

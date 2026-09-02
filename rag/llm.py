@@ -12,7 +12,7 @@ slices so the streaming code path is exercised even on cache hits.
 Environment (all optional, see ``.env.example``):
     RAG_MODEL, RAG_COMPARISON_MODEL, RAG_FALLBACK_MODEL, RAG_REWRITE_MODEL
     RAG_TIMEOUT_S, RAG_FIRST_TOKEN_TIMEOUT_S, RAG_MAX_TOKENS, RAG_THINK_MAX_TOKENS,
-    RAG_TEMPERATURE, CONTEXT_TOKEN_BUDGET, RETRIEVAL_K, RETRIEVAL_MIN_SCORE,
+    RAG_TEMPERATURE, CONTEXT_TOKEN_BUDGET, RETRIEVAL_K, RETRIEVAL_MIN_SCORE, RETRIEVAL_MIN_SCORE_CHROMA,
     RAG_QUERY_REWRITE, RAG_CACHE_DIR
 """
 
@@ -60,7 +60,8 @@ class RagSettings:
     temperature: float = 0.0
     context_token_budget: int = DEFAULT_CONTEXT_TOKEN_BUDGET
     k: int = 8
-    min_score: float = 0.3  # calibrated for FixtureRetriever; re-tune for the real retriever
+    min_score: float = 0.3  # no-answer gate for FixtureRetriever (IDF-weighted overlap)
+    min_score_chroma: float = 0.0  # no-answer gate for ChromaRetriever (normalised RRF, top hit = 1.0); see docs/retrieval-integration.md
     query_rewrite: bool = True
     base_url: str = DEFAULT_BASE_URL
     api_key: str | None = None
@@ -96,6 +97,7 @@ def load_rag_settings(**overrides: object) -> RagSettings:
         "context_token_budget": int(env.get("CONTEXT_TOKEN_BUDGET", str(DEFAULT_CONTEXT_TOKEN_BUDGET))),
         "k": int(env.get("RETRIEVAL_K", "8")),
         "min_score": float(env.get("RETRIEVAL_MIN_SCORE", "0.3")),
+        "min_score_chroma": float(env.get("RETRIEVAL_MIN_SCORE_CHROMA", "0.0")),
         "query_rewrite": _env_bool("RAG_QUERY_REWRITE", True),
         "base_url": env.get("THAILLM_BASE_URL", DEFAULT_BASE_URL),
         "api_key": env.get("THAILLM_API_KEY"),

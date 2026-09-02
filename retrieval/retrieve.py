@@ -92,19 +92,21 @@ class Retriever:
             self.reranker = FlagReranker(RERANK_MODEL, use_fp16=True)
 
     # ---- ชั้น dense ----
-    def _dense(self, query: str, k: int) -> list[str]:
+    def _dense(self, query: str, k: int, where: dict | None = None) -> list[str]:
         qv = self.model.encode([query], max_length=512, return_dense=True,
                                return_sparse=False, return_colbert_vecs=False)["dense_vecs"][0]
-        res = self.col.query(query_embeddings=[qv.tolist()], n_results=k)
+        res = self.col.query(query_embeddings=[qv.tolist()], n_results=k, where=where)
         return res["ids"][0]
 
     # ---- ชั้น sparse ----
-    def _bm25(self, query: str, k: int) -> list[str]:
+    def _bm25(self, query: str, k: int, allowed: set[str] | None = None) -> list[str]:
         from pythainlp.tokenize import word_tokenize
         toks = word_tokenize(query, engine="newmm", keep_whitespace=False)
         scores = self.bm25.get_scores(toks)
-        top = sorted(range(len(scores)), key=lambda i: -scores[i])[:k]
-        return [self.bm25_ids[i] for i in top]
+        order = sorted(range(len(scores)), key=lambda i: -scores[i])
+        if allowed is not None:
+            order = [i for i in order if self.bm25_ids[i] in allowed]
+        return [self.bm25_ids[i] for i in order[:k]]
 
     # ---- RRF ----
     @staticmethod
@@ -116,9 +118,14 @@ class Retriever:
             score[_id] = score.get(_id, 0.0) + 1.0 / (k + rank)
         return score
 
-    def search(self, query: str, top_k: int = TOP_K, cand_k: int = CAND_K) -> list[Hit]:
-        dense_ids = self._dense(query, cand_k)
-        bm25_ids = self._bm25(query, cand_k)
+    def search(self, query: str, top_k: int = TOP_K, cand_k: int = CAND_K,
+               doc_names: list[str] | None = None) -> list[Hit]:
+        # doc_names: จำกัดเอกสาร (metadata.doc_name) ก่อน fusion ทั้งสองชั้น — None = ทุกเอกสาร
+        where = {"doc_name": {"$in": list(doc_names)}} if doc_names else None
+        allowed = ({_id for _id, c in self.store.items() if c.get("metadata", {}).get("doc_name") in doc_names}
+                   if doc_names else None)
+        dense_ids = self._dense(query, cand_k, where=where)
+        bm25_ids = self._bm25(query, cand_k, allowed=allowed)
         fused = self._rrf(dense_ids, bm25_ids, RRF_K)
 
         # boost รหัสวิชา: ถ้า query มี \d{8} และ chunk มี course_code ตรง → บวกโบนัส
@@ -130,7 +137,8 @@ class Retriever:
                     fused[_id] += CODE_BOOST
             # เผื่อ chunk รหัสตรงไม่ติด candidate ทั้ง 2 ชั้น → ดึงเข้ามาด้วย
             for _id, c in self.store.items():
-                if c.get("metadata", {}).get("course_code") in codes and _id not in fused:
+                if c.get("metadata", {}).get("course_code") in codes and _id not in fused \
+                        and (allowed is None or _id in allowed):
                     fused[_id] = CODE_BOOST
 
         d_rank = {_id: i + 1 for i, _id in enumerate(dense_ids)}
