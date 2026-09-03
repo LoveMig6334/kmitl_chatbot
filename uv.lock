@@ -4052,19 +4052,25 @@ source = { editable = "." }
 dependencies = [
     { name = "chromadb" },
     { name = "fastapi" },
-    { name = "flagembedding" },
-    { name = "jupyter" },
+    { name = "httpx" },
+    { name = "numpy" },
     { name = "openai" },
     { name = "pythainlp" },
     { name = "python-dotenv" },
     { name = "rank-bm25" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+local-embed = [
+    { name = "flagembedding" },
     { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
     { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux'" },
-    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "jupyter" },
     { name = "pymupdf" },
     { name = "pytest" },
     { name = "ruff" },
@@ -4074,19 +4080,22 @@ dev = [
 requires-dist = [
     { name = "chromadb", specifier = ">=1.5.9" },
     { name = "fastapi", specifier = ">=0.141.1" },
-    { name = "flagembedding", specifier = ">=1.4.2" },
-    { name = "jupyter", specifier = ">=1.1.1" },
+    { name = "flagembedding", marker = "extra == 'local-embed'", specifier = ">=1.4.2" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "numpy", specifier = ">=1.26" },
     { name = "openai", specifier = ">=3.3.1" },
     { name = "pythainlp", specifier = ">=5.3.7" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "rank-bm25", specifier = ">=0.2.2" },
-    { name = "torch", marker = "sys_platform != 'linux'", specifier = ">=2.14.0" },
-    { name = "torch", marker = "sys_platform == 'linux'", specifier = ">=2.14.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "sys_platform == 'linux' and extra == 'local-embed'", specifier = ">=2.14.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "sys_platform != 'linux' and extra == 'local-embed'", specifier = ">=2.14.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.4" },
 ]
+provides-extras = ["local-embed"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "jupyter", specifier = ">=1.1.1" },
     { name = "pymupdf", specifier = ">=1.28.2" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.16.4" },

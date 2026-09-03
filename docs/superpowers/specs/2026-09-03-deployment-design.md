@@ -1,6 +1,7 @@
 # Deployment design — KMITL IT chatbot (free tier)
 
-Date: 2026-09-03. Status: approved in chat, pending spec review.
+Date: 2026-09-03. Status: approved in chat; **revised the same day** (§ Revision) after Hugging Face
+started requiring PRO for Docker Spaces.
 
 ## Goal
 Put the chatbot on the public internet at zero hosting cost, with the real retriever
@@ -77,3 +78,34 @@ Put the chatbot on the public internet at zero hosting cost, with the real retri
 ## Out of scope
 Custom domain, analytics, Neon, keeping the Space awake with a cron ping (can be added later
 with a free cron service), CI on GitHub.
+
+## Revision (2026-09-03, evening) — Render free + hosted BGE-M3
+
+Hugging Face now requires a PRO subscription for Docker Spaces on the free CPU tier, so the
+backend cannot run there.  Confirmed decisions (owner):
+
+- **Embeddings from an API instead of a local model.** `rag/remote_embedder.py:RemoteEmbedder`
+  returns BGE-M3 dense vectors over HTTP; `retrieval/index.py:load_embedder` returns it when
+  `EMBED_API` is set (`hf` = Hugging Face Inference, `openai` = any OpenAI-compatible
+  `/embeddings` endpoint such as Cloudflare Workers AI or SiliconFlow).  Primary: **HF Inference**
+  (owner's choice; zero extra accounts).  HF unloads the model when idle and answers 5xx for
+  ~30–60 s, so the embedder retries with backoff and pings the API every `EMBED_KEEPALIVE_S`
+  (240 s) while the server is up.  Vectors verified identical to the local model (cosine 1.0000
+  on three probes), so the Chroma index is unchanged.
+- **torch / FlagEmbedding become an optional extra** (`uv sync --extra local-embed`) used only
+  for index building, `RERANK=1`, or local embedding.  The runtime image has no torch: ~600 MB
+  image, ~260 MB RSS.  `jupyter` moved to the dev group for the same reason.
+- **Host: Render free web service** (`render.yaml` blueprint, Docker runtime, Singapore, branch
+  `deploy`, health check `/health`).  512 MB RAM, sleeps after 15 min idle, wakes in ~30 s,
+  no card required.  `ANSWER_EVENT_TIMEOUT_S=120` so a cold embedding call does not trip the
+  silence timeout.  Port from `$PORT` (Render sets it; default 10000).
+- **Index + PDFs** (gitignored on GitHub, ~199 MB) are packed by `scripts/space/pack_assets.sh`
+  into a **private Hugging Face dataset** `Bunnana/thai-llm-kmitl-assets` and downloaded at
+  image build by `scripts/space/fetch_assets.sh` using `ASSETS_URL` + `HF_TOKEN`, which Render
+  passes to the build as `ARG`s.  No Git LFS branch, no Space remote (the `hf` git remote and the
+  earlier `hf-deploy` plan are dropped).
+- **Competition note:** the user's question (only the question, never documents) is now sent to
+  a third-party embedding API.  The same BGE-M3 model embedded it locally before; hosting moved,
+  the model did not.  Recorded in README "Deployment" for the team to review against the rule.
+- Frontend plan (Vercel, `PDF_BASE_URL` proxy, Supabase) is unchanged; `FASTAPI_URL` /
+  `PDF_BASE_URL` point at `https://thai-llm-kmitl-api.onrender.com`.

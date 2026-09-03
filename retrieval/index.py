@@ -71,6 +71,12 @@ def sanitize_meta(meta: dict) -> dict:
 
 def load_embedder():
     """โหลด BGE-M3 แบบทนความต่างของ API FlagEmbedding แต่ละเวอร์ชัน (devices/device)"""
+    from rag.remote_embedder import RemoteEmbedder  # integration hook: EMBED_API=hf|openai → hosted BGE-M3, no torch
+
+    remote = RemoteEmbedder.from_env()
+    if remote is not None:
+        print(f"  embedding: remote {remote.describe()}", file=sys.stderr)
+        return remote
     from FlagEmbedding import BGEM3FlagModel
     try:
         import torch

@@ -1,0 +1,26 @@
+# Render Blueprint — free web service for the FastAPI backend (see README "Deployment").
+# Secrets (THAILLM_API_KEY, HF_TOKEN) and ASSETS_URL are set in the Render dashboard, not here.
+services:
+  - type: web
+    name: thai-llm-kmitl-api
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: deploy
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: THAILLM_API_KEY
+        sync: false
+      - key: HF_TOKEN
+        sync: false
+      - key: ASSETS_URL
+        value: https://huggingface.co/datasets/Bunnana/thai-llm-kmitl-assets/resolve/main/assets.tar.gz
+      - key: THAILLM_BASE_URL
+        value: http://thaillm.or.th/api/v1
+      - key: ALLOWED_ORIGINS
+        value: http://localhost:3000
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "30"
+      - key: LOG_LEVEL
+        value: INFO

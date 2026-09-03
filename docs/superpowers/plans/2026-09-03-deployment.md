@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12 + uv, FastAPI/uvicorn, chromadb + FlagEmbedding + torch (CPU), Next.js 16, `hf` CLI (huggingface_hub), Vercel CLI 59, Git LFS.
 
-**Spec:** `docs/superpowers/specs/2026-09-03-deployment-design.md`
+**Spec:** `docs/superpowers/specs/2026-09-03-deployment-design.md` — **see its Revision section: Tasks 5–6 below were replaced by Tasks 5R–6R at the end of this file** (Hugging Face Spaces became paid; backend now on Render with hosted embeddings).
 
 ## Global Constraints
 
@@ -716,3 +716,34 @@ Owner opens `https://thai-llm-kmitl.vercel.app/chat?q=AIT เรียนกี�
 
 - [ ] **Step 3: Record**
 Append a "Deployment" section to `README.md` (URLs, which branch deploys where, the `hf-deploy` LFS rule, the Space sleep caveat) and commit on `deploy`; push to `origin`; merge `deploy` into `hf-deploy` and push to `hf` again so both remotes hold the same code.
+
+---
+
+## Revision — Tasks 5R and 6R replace Tasks 5 and 6
+
+Tasks 1–4 were executed as written (commits on `deploy`).  Task 5's Dockerfile was rewritten and
+Task 6 (Space + LFS) is void.  Status of the replacement tasks at the time of writing:
+
+### Task 5R: Hosted embeddings, optional torch, Render Dockerfile — DONE
+
+- `rag/remote_embedder.py` (`RemoteEmbedder`, `hf`/`openai` backends, retries, keep-alive thread,
+  `from_env()`), `tests/test_remote_embedder.py` (7 tests).
+- `retrieval/index.py:load_embedder` hook (+ row in `docs/retrieval-integration.md` §6).
+- `pyproject.toml`: `httpx`, `numpy` explicit; `local-embed` extra = `flagembedding`, `torch`;
+  `jupyter` → dev; CPU torch index for Linux.  `uv.lock` regenerated.
+- `Dockerfile` (no torch, `$PORT`, `ASSETS_URL`/`HF_TOKEN` build args), `.dockerignore`,
+  `scripts/space/pack_assets.sh`, `scripts/space/fetch_assets.sh`, `render.yaml`.
+- Assets uploaded: `https://huggingface.co/datasets/Bunnana/thai-llm-kmitl-assets/resolve/main/assets.tar.gz` (private).
+- Verified: full `pytest` green; live retrieval through HF Inference with torch uninstalled
+  (262 MB RSS, correct AIT chunks).
+
+### Task 6R: Render service (owner + agent)
+
+- [ ] Owner: sign in at https://dashboard.render.com → New → Blueprint → connect
+  `LoveMig6334/kmitl_chatbot`, branch `deploy` → Render reads `render.yaml`.
+- [ ] Owner: in the service's Environment tab set the two secrets: `THAILLM_API_KEY` (from `.env`)
+  and `HF_TOKEN` (a *read* token from https://huggingface.co/settings/tokens).
+- [ ] Agent: watch the first build/deploy (Chrome screenshot), then
+  `curl https://thai-llm-kmitl-api.onrender.com/health`, `/pdf/AIT` HEAD, and a streamed `/chat`.
+- [ ] Then continue with Task 7 (Vercel) using `https://thai-llm-kmitl-api.onrender.com` for
+  `FASTAPI_URL` and `PDF_BASE_URL`, and add the Vercel URL to `ALLOWED_ORIGINS` in Render.

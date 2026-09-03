@@ -208,6 +208,7 @@ Diff base: commit `dfc04f4` (verbatim import).  `git diff dfc04f4 -- retrieval` 
 | `retrieve.py` | `_dense(query, k, where=None)` passes `where` to `col.query`; `_bm25(query, k, allowed=None)` filters ids before taking top-k; `search(…, doc_names=None)` builds `where` + `allowed` and the course-code pull-in honours `allowed` | program filter upstream of RRF; `doc_names=None` behaves exactly as before |
 | `retrieve.py` | `FlagReranker(…, devices=os.getenv("RERANK_DEVICE") or None)` | on macOS FlagEmbedding picks MPS and crashes in Metal; `RERANK_DEVICE=cpu` |
 | `index.py` | path defaults package-relative; `--chunks` default package-relative | |
+| `index.py` | `load_embedder()` returns `rag.remote_embedder.RemoteEmbedder` when `EMBED_API` is set (hosted BGE-M3 via HTTP; same `encode(...)["dense_vecs"]` surface) | free hosting has ~512 MB RAM: no torch/FlagEmbedding at runtime; vectors verified identical to local (cosine 1.0000) |
 | `api.py` | removed `sys.path.insert`; `rag.retrieve` → `retrieval.retrieve`; uvicorn target `retrieval.api:app` | not mounted by us |
 | `chunk.py` | `from rag.clean` → `from retrieval.clean` | |
 | `clean.py` | `clean_page()`: `out_lines.append(normalize_thai(cleaned))` per line; `return text` instead of `normalize_thai(text)` | **the page bug** (§3) |
