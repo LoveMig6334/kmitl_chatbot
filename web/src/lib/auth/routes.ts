@@ -3,14 +3,17 @@
 export const AFTER_LOGIN_PATH = "/chat";
 export const LOGIN_PATH = "/login";
 
-/** Pages that require a session. `/` is included because it forwards to the chat. */
-export const PROTECTED_PATHS = ["/", "/chat"] as const;
+/**
+ * Pages that require a session. Empty: guests may use the chat (their history stays in
+ * this browser); signing in only adds cloud-synced history. Kept so protection can be
+ * re-enabled by listing paths here.
+ */
+export const PROTECTED_PATHS: readonly string[] = [];
 
 /** Pages for signed-out users; a signed-in user is bounced to the chat. */
 export const AUTH_PATHS = ["/login", "/register", "/signup", "/forgot-password"] as const;
 
 function matches(pathname: string, base: string): boolean {
-  if (base === "/") return pathname === "/";
   return pathname === base || pathname.startsWith(`${base}/`);
 }
 
@@ -29,7 +32,7 @@ export function isAuthPath(pathname: string): boolean {
  */
 export function decideRedirect(pathname: string, isAuthenticated: boolean): string | null {
   if (!isAuthenticated && isProtectedPath(pathname)) {
-    return pathname === "/" || pathname === AFTER_LOGIN_PATH
+    return pathname === AFTER_LOGIN_PATH
       ? LOGIN_PATH
       : `${LOGIN_PATH}?next=${encodeURIComponent(pathname)}`;
   }

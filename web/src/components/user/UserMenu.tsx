@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Languages, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
+import { ChevronDown, Languages, LogIn, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -84,6 +84,7 @@ export function UserMenu({
           {user && <span className="text-xs">{t("user.signedInAs")}</span>}
           <span className="truncate text-sm font-medium text-fg">{name}</span>
           {user?.email && <span className="truncate text-xs">{user.email}</span>}
+          {!user && <span className="text-xs">{t("user.guestHint")}</span>}
           {demo && (
             <span className="mt-1 w-fit rounded-sm bg-accent-soft px-1.5 py-0.5 text-xs font-medium text-accent">
               {t("user.demoBadge")}
@@ -123,10 +124,17 @@ export function UserMenu({
             {t("user.settings")}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem destructive disabled={signingOut} onSelect={onSignOut}>
-          <LogOut className="size-4" aria-hidden="true" />
-          {t("user.signOut")}
-        </DropdownMenuItem>
+        {user ? (
+          <DropdownMenuItem destructive disabled={signingOut} onSelect={onSignOut}>
+            <LogOut className="size-4" aria-hidden="true" />
+            {t("user.signOut")}
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onSelect={() => router.push(LOGIN_PATH)}>
+            <LogIn className="size-4 text-fg-muted" aria-hidden="true" />
+            {t("user.signIn")}
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

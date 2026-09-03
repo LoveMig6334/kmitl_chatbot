@@ -55,7 +55,11 @@ export function Composer({ onSend, onStop, generating, scope, onScopeChange, pas
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "0px";
-    el.style.height = `${Math.min(el.scrollHeight, MAX_ROWS_PX)}px`;
+    // +1 absorbs sub-pixel rounding of scrollHeight (fractional line-height) that would
+    // otherwise leave a hairline overflow and show a scrollbar on an empty textarea.
+    const needed = el.scrollHeight + 1;
+    el.style.height = `${Math.min(needed, MAX_ROWS_PX)}px`;
+    el.style.overflowY = needed > MAX_ROWS_PX ? "auto" : "hidden";
   }, [text, speech.interim]);
 
   const submit = useCallback(() => {

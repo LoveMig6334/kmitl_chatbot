@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog as RadixDialog } from "radix-ui";
 import { FileText, PanelLeftOpen, SquarePen } from "lucide-react";
 import Link from "next/link";
@@ -34,6 +34,21 @@ export function ChatApp({ chatId }: { chatId: string | null }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [seed, setSeed] = useState<{ text: string; nonce: number } | null>(null);
+
+  // `/chat?q=…` (landing-page example questions) pre-fills the composer, then drops the param.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("q")?.trim();
+    if (!q) return;
+    // Deferred so the seed lands after hydration rather than inside the effect's own render pass.
+    // Not cancelled on cleanup: StrictMode's double-run would otherwise strip `q` and then drop it.
+    window.setTimeout(() => {
+      setSeed({ text: q.slice(0, 2000), nonce: Date.now() });
+      params.delete("q");
+      const rest = params.toString();
+      window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""));
+    }, 0);
+  }, []);
   const [sourceState, setSourceState] = useState<{ chatId: string | null; messageId: string; index: number } | null>(null);
   // The panel only applies to the chat it was opened in and while its message still exists.
   const source = sourceState && sourceState.chatId === chatId ? sourceState : null;

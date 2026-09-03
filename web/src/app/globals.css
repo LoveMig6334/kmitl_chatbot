@@ -202,6 +202,70 @@
 .markdown.streaming > :last-child::after { content: "▍"; color: var(--accent); animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* --- Landing page: floating chat preview --- */
+.tilt-card {
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --lift: 0px;
+  transform: perspective(900px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y)) translateY(var(--lift));
+  transform-style: preserve-3d;
+  transition: transform 250ms ease-out, box-shadow 250ms ease-out;
+  will-change: transform;
+  /* idle: slowly tilts around all four corners while drifting up and down */
+  animation: tilt-around 9s ease-in-out infinite;
+}
+.tilt-card[data-hovering="true"] { animation-play-state: paused; transition-duration: 120ms; }
+@keyframes tilt-around {
+  0%   { --tilt-x: 3deg;  --tilt-y: -4deg; --lift: 0px; }
+  25%  { --tilt-x: -3deg; --tilt-y: -3deg; --lift: -8px; }
+  50%  { --tilt-x: -3deg; --tilt-y: 4deg;  --lift: -2px; }
+  75%  { --tilt-x: 3deg;  --tilt-y: 3deg;  --lift: -9px; }
+  100% { --tilt-x: 3deg;  --tilt-y: -4deg; --lift: 0px; }
+}
+@property --lift { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --tilt-x { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@property --tilt-y { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
+/* source-reference reveal (the popup over the [1] chip) */
+.pop-in { animation: pop-in 180ms ease-out; transform-origin: var(--radix-hover-card-content-transform-origin); }
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+.doc-line { transform-origin: left; animation: doc-line 420ms ease-out both; animation-delay: var(--i, 0ms); }
+@keyframes doc-line {
+  from { opacity: 0; transform: scaleX(0.2); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+.doc-highlight { animation: doc-highlight 700ms ease-out both; animation-delay: 380ms; }
+@keyframes doc-highlight {
+  0% { opacity: 0; transform: translateY(6px); }
+  40% { opacity: 1; transform: none; box-shadow: 0 0 0 4px var(--accent-soft); }
+  100% { opacity: 1; box-shadow: 0 0 0 0 transparent; }
+}
+.doc-badge { animation: doc-badge 500ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: 600ms; }
+@keyframes doc-badge {
+  from { opacity: 0; transform: scale(0.6) rotate(-8deg); }
+  to { opacity: 1; transform: none; }
+}
+
+/* example questions: two rows drifting in opposite directions; pause on hover/focus */
+.marquee { overflow: hidden; mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent); }
+.marquee-track { display: flex; width: max-content; gap: 0.75rem; animation: marquee var(--marquee-duration, 40s) linear infinite; }
+.marquee-track[data-reverse] { animation-direction: reverse; }
+.marquee:hover .marquee-track, .marquee:focus-within .marquee-track { animation-play-state: paused; }
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-100% / 3 - 0.25rem)); } /* one of three copies, plus its share of the gap */
+}
+@media (prefers-reduced-motion: reduce) {
+  .tilt-card { animation: none; transition: none; transform: none; }
+  .pop-in, .doc-line, .doc-highlight, .doc-badge { animation: none; }
+  .marquee { mask-image: none; }
+  .marquee-track { animation: none; width: auto; flex-wrap: wrap; }
+  .marquee-track > [aria-hidden] { display: none; }
+}
+
 /* highlight.js token colours from the palette (no theme stylesheet) */
 .hljs-comment, .hljs-quote { color: var(--fg-subtle); font-style: italic; }
 .hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-type { color: var(--accent); }

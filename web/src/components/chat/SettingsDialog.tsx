@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Monitor, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -10,7 +11,7 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { useUser } from "@/hooks/useUser";
 import { useLocale } from "@/providers/LocaleProvider";
 import { useTheme, type ThemeMode } from "@/providers/ThemeProvider";
-import { updateDisplayName, validateDisplayName } from "@/lib/auth";
+import { LOGIN_PATH, updateDisplayName, validateDisplayName } from "@/lib/auth";
 import { authErrorKey } from "@/lib/auth/errors";
 import { cn } from "@/lib/cn";
 
@@ -35,7 +36,16 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
         <section className="flex flex-col gap-3">
           <h3 className="text-xs font-medium uppercase tracking-wide text-fg-muted">{t("settings.profile")}</h3>
-          <ProfileForm key={`${open}:${user?.displayName ?? ""}`} initialName={user?.displayName ?? ""} email={user?.email ?? ""} demo={demo} />
+          {user ? (
+            <ProfileForm key={`${open}:${user.displayName}`} initialName={user.displayName} email={user.email ?? ""} demo={demo} />
+          ) : (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-fg-muted">{t("settings.guestProfile")}</p>
+              <Button asChild variant="outline" className="w-fit">
+                <Link href={LOGIN_PATH}>{t("user.signIn")}</Link>
+              </Button>
+            </div>
+          )}
         </section>
 
         <section className="flex flex-col gap-3 border-t border-border pt-4">

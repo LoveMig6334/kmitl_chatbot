@@ -255,6 +255,14 @@ drives the Next route (in-scope, off-topic, abort → checks the FastAPI log for
   `user_metadata.display_name`. Route protection is `web/src/proxy.ts` (Next 16 proxy, formerly middleware) using the
   pure rules in `lib/auth/routes.ts`; without Supabase keys the app runs in demo mode (simulated sign-in, no protection).
   Supabase errors are mapped to `AuthErrorCode` in `lib/auth/errors.ts` — raw messages are never shown.
+- Guest access: `PROTECTED_PATHS` is empty — `/chat` works signed-out (history in localStorage via
+  `LocalChatRepository`; signing in switches to Supabase but does not migrate local chats). `UserMenu` and
+  `SettingsDialog` show a sign-in prompt for guests. `/chat?q=…` pre-fills the composer (landing example questions).
+- Landing page `/` (`web/src/components/landing/`): laid out like a cited document — headline with a live `[1]`
+  marker (hover reveal, not a link), table of contents with dot leaders, 4 program boxes, prose features, numbered
+  pipeline steps, marquee of example questions linking to `/chat?q=`. Accent only on citations + primary button.
+  Product claims in `landing.*` strings must stay true to the backend (the preview fact "AIT 120 credits, 4 years"
+  is from `AIT-p12-c1`).
 - Chat page: `web/src/components/chat/` on `hooks/useChatController.ts` (send/stream/stop, replace-edit,
   regenerate, rename/delete, per-chat scope) over `lib/chat/` (stream reducer, payload, `ChatRepository`:
   localStorage in demo mode, Supabase otherwise). Routes `/chat` and `/chat/<id>` share one optional

@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 import { decideRedirect, safeNextPath } from "./routes";
 
 describe("decideRedirect", () => {
-  it("sends signed-out users on protected pages to /login", () => {
-    expect(decideRedirect("/chat", false)).toBe("/login");
-    expect(decideRedirect("/", false)).toBe("/login");
-    expect(decideRedirect("/chat/abc", false)).toBe("/login?next=%2Fchat%2Fabc");
+  it("lets signed-out users into the chat (guest mode)", () => {
+    expect(decideRedirect("/chat", false)).toBeNull();
+    expect(decideRedirect("/chat/abc", false)).toBeNull();
   });
   it("sends signed-in users on auth pages to the chat", () => {
     for (const p of ["/login", "/register", "/signup", "/forgot-password"]) {
@@ -13,6 +12,8 @@ describe("decideRedirect", () => {
     }
   });
   it("lets everything else through", () => {
+    expect(decideRedirect("/", false)).toBeNull(); // public landing page
+    expect(decideRedirect("/", true)).toBeNull();
     expect(decideRedirect("/login", false)).toBeNull();
     expect(decideRedirect("/register", false)).toBeNull();
     expect(decideRedirect("/chat", true)).toBeNull();

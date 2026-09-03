@@ -24,10 +24,9 @@ describe("proxy (route protection)", () => {
     process.env = { ...ENV };
   });
 
-  it("redirects a signed-out visitor from /chat to /login", async () => {
+  it("lets a signed-out visitor use /chat as a guest", async () => {
     const res = await proxy(req("/chat"));
-    expect(res.status).toBe(307);
-    expect(res.headers.get("location")).toBe("http://localhost:3000/login");
+    expect(res.status).toBe(200);
   });
 
   it("redirects a signed-in user away from /login and /register to /chat", async () => {
@@ -60,7 +59,8 @@ describe("proxy (route protection)", () => {
   });
 
   it("keeps the locale cookie on an auth redirect", async () => {
-    const res = await proxy(req("/chat?lang=en"));
+    supabase.user = { id: "u1" }; // signed-in users are bounced off /login
+    const res = await proxy(req("/login?lang=en"));
     expect(res.status).toBe(307);
     expect(res.cookies.get("kmitl.locale")?.value).toBe("en");
   });

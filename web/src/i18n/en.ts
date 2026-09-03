@@ -38,6 +38,8 @@ export const en: Dictionary = {
   "user.signOut": "Sign out",
   "user.signedInAs": "Signed in as",
   "user.guest": "Guest",
+  "user.guestHint": "Chat history is kept in this browser only",
+  "user.signIn": "Sign in",
   "user.demoBadge": "Demo mode",
   "user.settings": "Settings",
 
@@ -242,5 +244,80 @@ export const en: Dictionary = {
   "settings.email": "Email",
   "settings.saveProfile": "Save profile",
   "settings.profileSaved": "Profile saved",
+  "settings.guestProfile": "You are using the chat as a guest. History is kept in this browser only. Sign in to set a name and keep your history with your account.",
   "settings.profileDemo": "Demo mode: the name is only stored in this browser",
+
+  // landing page
+  "landing.pageTitle": "Home",
+  "landing.nav.signIn": "Sign in",
+  "landing.nav.openChat": "Open chat",
+  "landing.hero.eyebrow": "Faculty of Information Technology, King Mongkut's Institute of Technology Ladkrabang",
+  "landing.hero.title": "Ask about IT KMITL programs and get answers that cite the page",
+  "landing.hero.subtitle":
+    "An assistant that reads the official handbooks of all four B.Sc. programs, answers in Thai or English, and points every sentence back to the page it came from. For high-school students and parents choosing a major.",
+  "landing.hero.primary": "Start asking",
+  "landing.hero.secondary": "Sign in to save your history",
+  "landing.hero.signedIn": "Signed in as {name}",
+  "landing.hero.continue": "Continue to chat",
+  "landing.toc.title": "Contents",
+  "landing.toc.programs": "4 programs",
+  "landing.toc.features": "6 points",
+  "landing.toc.how": "3 steps",
+  "landing.toc.examples": "6 questions",
+  "landing.programs.title": "Programs covered",
+  "landing.programs.subtitle":
+    "All four B.Sc. programs of the faculty. Ask about one, or compare across them.",
+  "landing.programs.version.AIT": "New curriculum, B.E. 2566 (2023)",
+  "landing.programs.version.DSBA": "Revised curriculum, B.E. 2565 (2022)",
+  "landing.programs.version.BIT": "Revised curriculum, B.E. 2565 (2022)",
+  "landing.programs.version.IT": "Revised curriculum, B.E. 2565 (2022)",
+  "landing.features.title": "What it does",
+  "landing.features.grounded.title": "Answers only from the handbooks",
+  "landing.features.grounded.body":
+    "Nothing is filled in from the model's memory. When the documents don't cover something, it says so instead of guessing.",
+  "landing.features.citations.title": "Cites the PDF page",
+  "landing.features.citations.body":
+    "Every sentence carries a reference number. Click it to open that page of the source document in a side panel.",
+  "landing.features.compare.title": "Compares programs side by side",
+  "landing.features.compare.body":
+    "Ask how DSBA differs from IT and it searches both handbooks and lays the answer out together.",
+  "landing.features.scope.title": "Knows what is out of scope",
+  "landing.features.scope.body":
+    "Off-topic questions, other faculties or other universities get pointed to the right place instead of a made-up answer.",
+  "landing.features.bilingual.title": "Replies in the language you ask in",
+  "landing.features.bilingual.body":
+    "Thai and English are both supported. The interface switches language and light/dark theme too.",
+  "landing.features.history.title": "Keeps your conversations",
+  "landing.features.history.body":
+    "Sign in with Google or email to come back and pick up where you left off.",
+  "landing.how.title": "How it works",
+  "landing.how.subtitle": "Every step runs on ThaiLLM Thai-language models only, as the competition rules require.",
+  "landing.how.step1.title": "Screen the question",
+  "landing.how.step1.body":
+    "Detect the language, the programs mentioned and the kind of question. Block out-of-scope requests and attempts to override the rules.",
+  "landing.how.step1.output": "Thai, program AIT, fact lookup",
+  "landing.how.step2.title": "Search the handbooks",
+  "landing.how.step2.body":
+    "Find the relevant passages across all four handbooks with combined keyword and meaning search, then re-rank them.",
+  "landing.how.step2.output": "AIT page 12, page 9, page 3",
+  "landing.how.step3.title": "Answer with citations",
+  "landing.how.step3.body":
+    "Write the answer from those passages alone, stream it word by word, and end every sentence with its page number.",
+  "landing.how.step3.output": "120 credits [1] over 4 years [1]",
+  "landing.examples.title": "Example questions",
+  "landing.examples.subtitle": "Pick any question and it opens the chat with that question typed in for you.",
+  "landing.cta.title": "Ready to pick a major?",
+  "landing.cta.body": "Sign in and start asking right away.",
+  "landing.footer.built": "A ThaiLLM competition project, not an official KMITL service.",
+  "landing.footer.stack": "Built with Next.js, FastAPI and models from ThaiLLM.",
+  "landing.preview.question": "How many credits is the AIT program?",
+  "landing.preview.answer":
+    "The Artificial Intelligence Technology (AIT) program requires 120 credits in total [1] over a 4-year study period [1].",
+  "landing.preview.source": "AIT page 12, General information",
+  "landing.preview.docName": "AIT.pdf",
+  "landing.preview.docHeading": "General information",
+  "landing.preview.excerpt": "Total credits for the program: 120 credits",
+  "landing.preview.excerptLabel": "Cited passage",
+  "landing.preview.assistant": "Assistant",
+  "landing.preview.you": "You",
 };

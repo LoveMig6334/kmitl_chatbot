@@ -41,6 +41,8 @@ export const th = {
   "user.signOut": "ออกจากระบบ",
   "user.signedInAs": "เข้าสู่ระบบในชื่อ",
   "user.guest": "ผู้เยี่ยมชม",
+  "user.guestHint": "ประวัติแชทเก็บไว้ในเบราว์เซอร์นี้เท่านั้น",
+  "user.signIn": "เข้าสู่ระบบ",
   "user.demoBadge": "โหมดสาธิต",
   "user.settings": "การตั้งค่า",
 
@@ -245,7 +247,82 @@ export const th = {
   "settings.email": "อีเมล",
   "settings.saveProfile": "บันทึกโปรไฟล์",
   "settings.profileSaved": "บันทึกโปรไฟล์แล้ว",
+  "settings.guestProfile": "คุณกำลังใช้งานแบบผู้เยี่ยมชม ประวัติแชทเก็บไว้ในเบราว์เซอร์นี้เท่านั้น เข้าสู่ระบบเพื่อตั้งชื่อและบันทึกประวัติไว้กับบัญชี",
   "settings.profileDemo": "โหมดสาธิต: ชื่อจะถูกเก็บไว้ในเบราว์เซอร์นี้เท่านั้น",
+
+  // landing page
+  "landing.pageTitle": "หน้าแรก",
+  "landing.nav.signIn": "เข้าสู่ระบบ",
+  "landing.nav.openChat": "ไปที่แชท",
+  "landing.hero.eyebrow": "คณะเทคโนโลยีสารสนเทศ สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง",
+  "landing.hero.title": "ถามเรื่องหลักสูตรไอที สจล. แล้วได้คำตอบที่บอกอ้างอิง",
+  "landing.hero.subtitle":
+    "ผู้ช่วยที่อ่านเล่มหลักสูตรจริงของทั้ง 4 สาขา ตอบเป็นภาษาไทยหรืออังกฤษ และชี้ทุกประโยคกลับไปยังหน้าเอกสารที่มาของมัน สำหรับน้อง ๆ ม.ปลายและผู้ปกครองที่กำลังเลือกสาขา",
+  "landing.hero.primary": "เริ่มถาม",
+  "landing.hero.secondary": "เข้าสู่ระบบเพื่อบันทึกประวัติ",
+  "landing.hero.signedIn": "เข้าสู่ระบบแล้วในชื่อ {name}",
+  "landing.hero.continue": "ไปที่แชทต่อ",
+  "landing.toc.title": "สารบัญ",
+  "landing.toc.programs": "4 สาขา",
+  "landing.toc.features": "6 ข้อ",
+  "landing.toc.how": "3 ขั้นตอน",
+  "landing.toc.examples": "6 คำถาม",
+  "landing.programs.title": "หลักสูตรที่ครอบคลุม",
+  "landing.programs.subtitle":
+    "ปริญญาตรีทั้ง 4 สาขาของคณะ ถามเจาะสาขาเดียว หรือถามเทียบข้ามสาขาก็ได้",
+  "landing.programs.version.AIT": "หลักสูตรใหม่ พ.ศ. 2566",
+  "landing.programs.version.DSBA": "หลักสูตรปรับปรุง พ.ศ. 2565",
+  "landing.programs.version.BIT": "หลักสูตรปรับปรุง พ.ศ. 2565",
+  "landing.programs.version.IT": "หลักสูตรปรับปรุง พ.ศ. 2565",
+  "landing.features.title": "สิ่งที่ทำได้",
+  "landing.features.grounded.title": "ตอบจากเล่มหลักสูตรเท่านั้น",
+  "landing.features.grounded.body":
+    "ไม่แต่งเติมจากความจำของโมเดล ถ้าเอกสารไม่มีข้อมูล ระบบจะบอกว่าไม่พบ แทนการเดา",
+  "landing.features.citations.title": "อ้างอิงถึงหน้า PDF",
+  "landing.features.citations.body":
+    "ทุกประโยคมีเลขอ้างอิง กดแล้วเปิดหน้านั้นของเอกสารต้นฉบับได้ในแผงด้านข้าง",
+  "landing.features.compare.title": "เทียบสาขาให้เห็นในตารางเดียว",
+  "landing.features.compare.body":
+    "ถามว่า DSBA กับ IT ต่างกันอย่างไร ระบบจะค้นทั้งสองเล่มแล้วสรุปเคียงกัน",
+  "landing.features.scope.title": "รู้ว่าอะไรอยู่นอกขอบเขต",
+  "landing.features.scope.body":
+    "คำถามนอกเรื่อง เรื่องคณะอื่น หรือมหาวิทยาลัยอื่น จะได้คำแนะนำไปยังแหล่งที่ถูกต้องแทน",
+  "landing.features.bilingual.title": "ถามภาษาไหน ตอบภาษานั้น",
+  "landing.features.bilingual.body":
+    "รองรับไทยและอังกฤษ ส่วนติดต่อผู้ใช้สลับภาษาและธีมสว่าง/มืดได้",
+  "landing.features.history.title": "เก็บบทสนทนาไว้ให้",
+  "landing.features.history.body":
+    "เข้าสู่ระบบด้วย Google หรืออีเมล เพื่อกลับมาอ่านหรือถามต่อจากเดิมได้",
+  "landing.how.title": "วิธีทำงาน",
+  "landing.how.subtitle": "ทุกขั้นตอนใช้โมเดลภาษาไทยของ ThaiLLM เท่านั้น ตามกติกาของการแข่งขัน",
+  "landing.how.step1.title": "คัดกรองคำถาม",
+  "landing.how.step1.body":
+    "ระบุภาษา สาขาที่ถามถึง และประเภทคำถาม กันคำถามนอกขอบเขตและความพยายามสั่งโมเดลนอกกติกา",
+  "landing.how.step1.output": "ภาษาไทย, สาขา AIT, ถามข้อเท็จจริง",
+  "landing.how.step2.title": "ค้นในเล่มหลักสูตร",
+  "landing.how.step2.body":
+    "ค้นย่อหน้าที่เกี่ยวข้องจากทั้ง 4 เล่มด้วยการค้นแบบผสมคำและความหมาย แล้วจัดอันดับใหม่ให้ตรงที่สุด",
+  "landing.how.step2.output": "AIT หน้า 12, หน้า 9, หน้า 3",
+  "landing.how.step3.title": "ตอบพร้อมอ้างอิง",
+  "landing.how.step3.body":
+    "เขียนคำตอบจากย่อหน้าที่ค้นได้เท่านั้น สตรีมทีละคำ และแนบเลขหน้าท้ายทุกประโยค",
+  "landing.how.step3.output": "120 หน่วยกิต [1] ใช้เวลา 4 ปี [1]",
+  "landing.examples.title": "ตัวอย่างคำถาม",
+  "landing.examples.subtitle": "กดคำถามใดก็ได้ ระบบจะพาไปที่แชทพร้อมพิมพ์คำถามนั้นให้",
+  "landing.cta.title": "พร้อมเลือกสาขาแล้วหรือยัง",
+  "landing.cta.body": "เข้าสู่ระบบแล้วเริ่มถามได้ทันที",
+  "landing.footer.built": "โปรเจกต์สำหรับการแข่งขัน ThaiLLM ไม่ใช่บริการทางการของ สจล.",
+  "landing.footer.stack": "สร้างด้วย Next.js, FastAPI และโมเดลจาก ThaiLLM",
+  "landing.preview.question": "หลักสูตร AIT ต้องเรียนกี่หน่วยกิต",
+  "landing.preview.answer":
+    "หลักสูตรเทคโนโลยีปัญญาประดิษฐ์ (AIT) มีจำนวนหน่วยกิตรวมตลอดหลักสูตร 120 หน่วยกิต [1] ใช้ระยะเวลาศึกษา 4 ปี [1]",
+  "landing.preview.source": "AIT หน้า 12 ข้อมูลทั่วไปของหลักสูตร",
+  "landing.preview.docName": "AIT.pdf",
+  "landing.preview.docHeading": "ข้อมูลทั่วไปของหลักสูตร",
+  "landing.preview.excerpt": "จำนวนหน่วยกิตรวมตลอดหลักสูตร 120 หน่วยกิต",
+  "landing.preview.excerptLabel": "ข้อความที่อ้างอิง",
+  "landing.preview.assistant": "ผู้ช่วย",
+  "landing.preview.you": "คุณ",
 } as const;
 
 export type MessageKey = keyof typeof th;
