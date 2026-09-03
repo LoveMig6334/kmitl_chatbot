@@ -25,4 +25,4 @@ data/raw/
 retrieval/data/chroma/
 retrieval/data/bm25.pkl
 .vercel
-.env*
+.env.local
