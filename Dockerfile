@@ -30,9 +30,11 @@ COPY --chown=user:user . .
 RUN uv sync --frozen --no-dev && chown -R user:user /app
 
 # 3. index + PDFs from a release asset when they are not in the build context
+# HF_TOKEN is read by the script from its environment (build ARGs are env vars inside RUN) and is
+# deliberately NOT referenced on the RUN line: BuildKit prints expanded ARG values in the step title.
 ARG ASSETS_URL=""
 ARG HF_TOKEN=""
-RUN if [ -n "$ASSETS_URL" ]; then HF_TOKEN="$HF_TOKEN" sh scripts/space/fetch_assets.sh "$ASSETS_URL" && chown -R user:user /app; fi
+RUN if [ -n "$ASSETS_URL" ]; then sh scripts/space/fetch_assets.sh "$ASSETS_URL" && chown -R user:user /app; fi
 
 USER user
 ENV ANSWERER=rag \
