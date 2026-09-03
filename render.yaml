@@ -19,7 +19,7 @@ services:
       - key: THAILLM_BASE_URL
         value: http://thaillm.or.th/api/v1
       - key: ALLOWED_ORIGINS
-        value: http://localhost:3000
+        value: https://thai-llm-kmitl.vercel.app,http://localhost:3000
       - key: RATE_LIMIT_PER_MINUTE
         value: "30"
       - key: LOG_LEVEL
