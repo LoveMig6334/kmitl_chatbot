@@ -142,8 +142,14 @@ class ChromaRetriever:
         return self._impl
 
     def warm_up(self) -> float:
-        """Load models/index now (e.g. at server start); returns the load time in seconds."""
-        self._get_impl()
+        """Load models/index now (e.g. at server start); returns the load time in seconds.
+        A hosted embedder is pinged too, so a cold API (HF Inference) starts loading before the first user."""
+        impl = self._get_impl()
+        ping = getattr(getattr(impl, "model", None), "ping", None)
+        if callable(ping):
+            t0 = time.perf_counter()
+            ok = ping()
+            log.info("embedding API %s (%.1fs)", "ready" if ok else "UNAVAILABLE — BM25-only until it recovers", time.perf_counter() - t0)
         return self.load_seconds or 0.0
 
     # -------------------------------------------------------------- retrieve --

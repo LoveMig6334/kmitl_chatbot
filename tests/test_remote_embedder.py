@@ -81,8 +81,9 @@ def test_from_env(monkeypatch):
     emb = RemoteEmbedder.from_env()
     assert emb is not None and (emb.api, emb.url, emb.token, emb.model) == ("openai", "https://x/v1", "k", "custom")
     monkeypatch.setenv("EMBED_API", "bogus")
-    with pytest.raises(ValueError):
-        RemoteEmbedder.from_env()
+    from rag.remote_embedder import UnavailableEmbedder
+
+    assert isinstance(RemoteEmbedder.from_env(), UnavailableEmbedder)
 
 
 def test_keepalive_pings_and_swallows_errors():
@@ -102,3 +103,30 @@ def test_from_env_starts_keepalive(monkeypatch):
     monkeypatch.setenv("EMBED_KEEPALIVE_S", "300")
     RemoteEmbedder.from_env()
     assert started == [300.0]
+
+
+def test_failures_raise_embedding_unavailable():
+    from rag.remote_embedder import EmbeddingUnavailable
+
+    down = RemoteEmbedder(api="hf", model="m", token=None, transport=_hf_server([], fail_first=99), max_attempts=1, sleep=lambda _s: None)
+    with pytest.raises(EmbeddingUnavailable):
+        down.encode(["q"])
+
+    def reject(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": "bad token"})
+
+    bad = RemoteEmbedder(api="hf", model="m", token="x", transport=httpx.MockTransport(reject))
+    with pytest.raises(EmbeddingUnavailable, match="401"):
+        bad.encode(["q"])
+
+
+def test_from_env_misconfiguration_degrades_instead_of_crashing(monkeypatch):
+    from rag.remote_embedder import EmbeddingUnavailable
+
+    monkeypatch.setenv("EMBED_API", "openai")
+    monkeypatch.delenv("EMBED_API_URL", raising=False)
+    emb = RemoteEmbedder.from_env()
+    assert emb is not None
+    with pytest.raises(EmbeddingUnavailable, match="EMBED_API_URL"):
+        emb.encode(["q"])
+    emb.ping()  # never raises

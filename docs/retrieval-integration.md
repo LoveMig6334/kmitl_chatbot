@@ -209,6 +209,7 @@ Diff base: commit `dfc04f4` (verbatim import).  `git diff dfc04f4 -- retrieval` 
 | `retrieve.py` | `FlagReranker(…, devices=os.getenv("RERANK_DEVICE") or None)` | on macOS FlagEmbedding picks MPS and crashes in Metal; `RERANK_DEVICE=cpu` |
 | `index.py` | path defaults package-relative; `--chunks` default package-relative | |
 | `index.py` | `load_embedder()` returns `rag.remote_embedder.RemoteEmbedder` when `EMBED_API` is set (hosted BGE-M3 via HTTP; same `encode(...)["dense_vecs"]` surface) | free hosting has ~512 MB RAM: no torch/FlagEmbedding at runtime; vectors verified identical to local (cosine 1.0000) |
+| `retrieve.py` | `search()` wraps `_dense()` in `try/except rag.remote_embedder.EmbeddingUnavailable` → `dense_ids = []` (BM25-only) with a stderr note; module-level import of that exception | the hosted embedding API can be cold/down/misconfigured; the chatbot must still answer |
 | `api.py` | removed `sys.path.insert`; `rag.retrieve` → `retrieval.retrieve`; uvicorn target `retrieval.api:app` | not mounted by us |
 | `chunk.py` | `from rag.clean` → `from retrieval.clean` | |
 | `clean.py` | `clean_page()`: `out_lines.append(normalize_thai(cleaned))` per line; `return text` instead of `normalize_thai(text)` | **the page bug** (§3) |

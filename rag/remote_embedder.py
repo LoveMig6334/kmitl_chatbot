@@ -34,6 +34,32 @@ HF_URL = "https://router.huggingface.co/hf-inference/models/{model}/pipeline/fea
 APIS = ("hf", "openai")
 
 
+class EmbeddingUnavailable(RuntimeError):
+    """The embedding API cannot serve right now (down, cold, rejected, or misconfigured).
+
+    ``retrieval/retrieve.py:search`` catches this and falls back to BM25-only ranking."""
+
+
+class UnavailableEmbedder:
+    """Placeholder returned by ``RemoteEmbedder.from_env`` when the configuration is unusable:
+    the server still starts and retrieval degrades to BM25 instead of crashing at boot."""
+
+    name = "remote-unavailable"
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    def describe(self) -> str:
+        return f"UNAVAILABLE ({self.reason})"
+
+    def encode(self, texts: list[str] | str, **_: Any) -> dict[str, np.ndarray]:
+        raise EmbeddingUnavailable(self.reason)
+
+    def ping(self) -> bool:
+        log.error("embedding API not configured: %s", self.reason)
+        return False
+
+
 class RemoteEmbedder:
     name = "remote"
 
@@ -66,13 +92,22 @@ class RemoteEmbedder:
         self._client = httpx.Client(timeout=timeout_s, headers=headers, transport=transport)
 
     @classmethod
-    def from_env(cls) -> RemoteEmbedder | None:
+    def from_env(cls) -> RemoteEmbedder | UnavailableEmbedder | None:
         """``EMBED_API`` unset → ``None`` (use the local model).  Env: ``EMBED_API=hf|openai``,
         ``EMBED_MODEL``, ``EMBED_API_URL`` (openai base URL), ``EMBED_API_KEY`` (or ``HF_TOKEN`` for hf),
-        ``EMBED_API_TIMEOUT_S``, ``EMBED_API_MAX_ATTEMPTS``."""
+        ``EMBED_API_TIMEOUT_S``, ``EMBED_API_MAX_ATTEMPTS``, ``EMBED_KEEPALIVE_S``.
+        A bad configuration yields an :class:`UnavailableEmbedder` (BM25-only retrieval) — never an exception."""
         api = (os.environ.get("EMBED_API") or "").strip().lower()
         if not api:
             return None
+        try:
+            return cls._from_env(api)
+        except ValueError as exc:
+            log.error("embedding API misconfigured, retrieval will be BM25-only: %s", exc)
+            return UnavailableEmbedder(str(exc))
+
+    @classmethod
+    def _from_env(cls, api: str) -> RemoteEmbedder:
         token = os.environ.get("EMBED_API_KEY") or (os.environ.get("HF_TOKEN") if api == "hf" else None)
         if api == "hf" and not token:  # local dev: reuse the `hf auth login` token
             try:
@@ -98,19 +133,24 @@ class RemoteEmbedder:
         return f"{self.api} {self.model} @ {self.url}"
 
     # ---- keep-alive: HF Inference unloads idle models and then answers 5xx for ~a minute ---------
-    def keepalive_once(self) -> None:
+    def ping(self) -> bool:
+        """One embedding call; ``False`` (logged) instead of raising.  Used at warm-up and by keep-alive."""
         try:
             self.encode(["ping"])
+            return True
         except (RuntimeError, ValueError) as exc:  # never crash the server over a ping
-            log.warning("embedding keep-alive ping failed: %s", exc)
+            log.warning("embedding API ping failed: %s", exc)
+            return False
+
+    keepalive_once = ping
 
     def start_keepalive(self, interval_s: float) -> None:
-        """Ping the API every ``interval_s`` seconds from a daemon thread (``EMBED_KEEPALIVE_S``)."""
+        """Ping the API now and every ``interval_s`` seconds from a daemon thread (``EMBED_KEEPALIVE_S``)."""
 
         def loop() -> None:
             while True:
-                time.sleep(interval_s)
                 self.keepalive_once()
+                time.sleep(interval_s)
 
         threading.Thread(target=loop, name="embed-keepalive", daemon=True).start()
         log.info("embedding keep-alive every %.0fs", interval_s)
@@ -122,7 +162,7 @@ class RemoteEmbedder:
         vecs = self._request(list(texts))
         arr = np.asarray(vecs, dtype=np.float32)
         if arr.ndim != 2 or arr.shape[0] != len(texts):
-            raise RuntimeError(f"embedding API returned shape {arr.shape} for {len(texts)} inputs")
+            raise EmbeddingUnavailable(f"embedding API returned shape {arr.shape} for {len(texts)} inputs")
         norms = np.linalg.norm(arr, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         return {"dense_vecs": arr / norms}
@@ -142,14 +182,14 @@ class RemoteEmbedder:
                     return self._parse(r.json(), len(texts))
                 last = f"HTTP {r.status_code}: {r.text[:120]}"
             except httpx.HTTPStatusError as exc:
-                raise RuntimeError(f"embedding API rejected the request ({exc.response.status_code}): {exc.response.text[:200]}") from exc
+                raise EmbeddingUnavailable(f"embedding API rejected the request ({exc.response.status_code}): {exc.response.text[:200]}") from exc
             except httpx.HTTPError as exc:
                 last = f"{type(exc).__name__}: {exc}"
             if attempt + 1 < self.max_attempts:
                 wait = min(2.0 ** attempt, 10.0)
                 log.warning("embedding API attempt %d/%d failed (%s); retrying in %.0fs", attempt + 1, self.max_attempts, last, wait)
                 self._sleep(wait)
-        raise RuntimeError(f"embedding API unavailable after {self.max_attempts} attempts: {last}")
+        raise EmbeddingUnavailable(f"embedding API unavailable after {self.max_attempts} attempts: {last}")
 
     def _parse(self, data: Any, n: int) -> list[list[float]]:
         if self.api == "openai":

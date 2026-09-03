@@ -27,6 +27,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from rag.remote_embedder import EmbeddingUnavailable  # integration hook (see docs/retrieval-integration.md §6)
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
@@ -125,7 +127,11 @@ class Retriever:
         where = {"doc_name": {"$in": list(doc_names)}} if doc_names else None
         allowed = ({_id for _id, c in self.store.items() if c.get("metadata", {}).get("doc_name") in doc_names}
                    if doc_names else None)
-        dense_ids = self._dense(query, cand_k, where=where)
+        try:
+            dense_ids = self._dense(query, cand_k, where=where)
+        except EmbeddingUnavailable as exc:  # integration hook: hosted embedder down → BM25-only (rag/remote_embedder.py)
+            print(f"dense layer unavailable, BM25 only: {exc}", file=sys.stderr)
+            dense_ids = []
         bm25_ids = self._bm25(query, cand_k, allowed=allowed)
         fused = self._rrf(dense_ids, bm25_ids, RRF_K)
 
