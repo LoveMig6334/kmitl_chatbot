@@ -224,7 +224,7 @@ citations (non-empty, retrieved, gold hit), not-found behaviour, dominant-script
 leakage (`<think>`, dangling `[n]`).  Failures print the answer and the raw model output.
 Pure functions behind the checks live in `rag/checks.py` and are unit-tested.
 
-## Frontend (`web/`, Next.js 16) — owned by the frontend teammate
+## Frontend (`web/`, Next.js 16) — redesigned in-house (see "UI conventions" below); teammate is walked through changes
 Browser → `web/src/app/api/chat/route.ts` → `web/src/lib/ai.ts:streamChat` → FastAPI `POST /chat`
 (`FASTAPI_URL`, server-side only, default `http://localhost:8000`).  The route re-emits the
 backend SSE as `data: {…}` lines: `{meta}` / `{delta}` / `{citations}` / `{done, partial}` /
@@ -255,6 +255,12 @@ drives the Next route (in-scope, off-topic, abort → checks the FastAPI log for
   `user_metadata.display_name`. Route protection is `web/src/proxy.ts` (Next 16 proxy, formerly middleware) using the
   pure rules in `lib/auth/routes.ts`; without Supabase keys the app runs in demo mode (simulated sign-in, no protection).
   Supabase errors are mapped to `AuthErrorCode` in `lib/auth/errors.ts` — raw messages are never shown.
-- Never run Supabase migrations or write to a remote project; produce SQL files and stop.
+- Chat page: `web/src/components/chat/` on `hooks/useChatController.ts` (send/stream/stop, replace-edit,
+  regenerate, rename/delete, per-chat scope) over `lib/chat/` (stream reducer, payload, `ChatRepository`:
+  localStorage in demo mode, Supabase otherwise). Routes `/chat` and `/chat/<id>` share one optional
+  catch-all page so switching chats never remounts. Citations open a right panel whose PDF viewer streams
+  from `app/api/pdf/[program]` (`PDF_DIR`, default `../data/raw`).
+- Never run Supabase migrations or write to a remote project; produce SQL files under
+  `web/supabase/migrations/` and stop (current schema: `0001_chats.sql`).
 - Backend (FastAPI) is out of scope for `web/` tasks — never edit it; report needed API changes instead.
 - Before finishing any `web/` task: `npm run lint && npm run typecheck && npm test && npm run build` (in `web/`).
