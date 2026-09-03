@@ -21,6 +21,7 @@ from gatekeeper.config import Settings
 from gatekeeper.schema import FACULTY, GateDecision
 
 from .answerer import Answerer, Turn, get_answerer, tokenize
+from .pdf import router as pdf_router
 from .ratelimit import RateLimiter
 from .reqlog import log_request, setup_logging
 from .sse import SSE_HEADERS, sse
@@ -105,6 +106,8 @@ def create_app(
     @app.get("/health")
     async def health() -> dict:
         return {"status": "ok", "answerer": answerer.name, "models": MODELS}
+
+    app.include_router(pdf_router)
 
     @app.post("/chat")
     async def chat(req: ChatRequest, request: Request):
