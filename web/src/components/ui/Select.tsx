@@ -1,31 +1,32 @@
+"use client";
+
+import { useId } from "react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { Label } from "./Label";
 
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   options: { value: string; label: string }[];
   placeholder?: string;
+  error?: string;
 }
 
-export function Select({
-  label,
-  options,
-  placeholder,
-  className,
-  id,
-  ...props
-}: SelectProps) {
+/** Native select styled with the design tokens (keyboard + screen-reader behaviour for free). */
+export function Select({ label, options, placeholder, error, className, id, ...props }: SelectProps) {
+  const autoId = useId();
+  const selectId = id ?? autoId;
   return (
     <div className="flex flex-col gap-1.5">
-      {label && (
-        <label htmlFor={id} className="text-xs font-medium text-muted">
-          {label}
-        </label>
-      )}
+      {label && <Label htmlFor={selectId}>{label}</Label>}
       <div className="relative">
         <select
-          id={id}
+          id={selectId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${selectId}-error` : undefined}
           className={cn(
-            "w-full appearance-none rounded-lg bg-surface-muted px-3.5 py-2.5 pr-9 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-accent/60",
+            "focus-ring h-10 w-full appearance-none rounded-md border border-border bg-surface px-3 pr-9 text-sm text-fg shadow-sm transition-colors hover:border-border-strong",
+            error && "border-danger",
             className,
           )}
           {...props}
@@ -41,16 +42,16 @@ export function Select({
             </option>
           ))}
         </select>
-        <svg
-          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
+        <ChevronDown
+          className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-fg-subtle"
+          aria-hidden="true"
+        />
       </div>
+      {error && (
+        <p id={`${selectId}-error`} role="alert" className="text-xs text-danger">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

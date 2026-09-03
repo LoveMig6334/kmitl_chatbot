@@ -1,21 +1,25 @@
 "use client";
 
 import { Moon, Sun } from "lucide-react";
-import { useAppStore } from "@/lib/store";
-import { useT } from "@/hooks/useT";
+import { Button } from "@/components/ui/Button";
+import { useTheme } from "@/providers/ThemeProvider";
+import { useTranslation } from "@/providers/LocaleProvider";
 
-export function ThemeToggle() {
-  const theme = useAppStore((s) => s.theme);
-  const toggle = useAppStore((s) => s.toggleTheme);
-  const t = useT();
-
+/** One-click light/dark flip (the user menu offers the full light/dark/system choice). */
+export function ThemeToggle({ className }: { className?: string }) {
+  const { resolvedTheme, setTheme } = useTheme();
+  const t = useTranslation();
+  const next = resolvedTheme === "dark" ? "light" : "dark";
   return (
-    <button
-      onClick={toggle}
-      title={theme === "dark" ? t.themeLight : t.themeDark}
-      className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+    <Button
+      variant="outline"
+      size="icon"
+      className={className}
+      onClick={() => setTheme(next)}
+      aria-label={t("theme.toggle")}
+      title={next === "dark" ? t("theme.dark") : t("theme.light")}
     >
-      {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-    </button>
+      {resolvedTheme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+    </Button>
   );
 }

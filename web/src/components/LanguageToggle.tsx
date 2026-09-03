@@ -1,34 +1,33 @@
 "use client";
 
-import { Languages } from "lucide-react";
-import { useAppStore } from "@/lib/store";
-import type { Locale } from "@/lib/constants";
+import { ToggleGroup } from "radix-ui";
+import { isLocale, LOCALES } from "@/i18n";
+import { useLocale } from "@/providers/LocaleProvider";
+import { cn } from "@/lib/cn";
 
-const options: { value: Locale; label: string }[] = [
-  { value: "th", label: "ไทย" },
-  { value: "en", label: "EN" },
-];
-
-export function LanguageToggle() {
-  const locale = useAppStore((s) => s.locale);
-  const setLocale = useAppStore((s) => s.setLocale);
-
+/** Segmented th/en switch: one tab stop, arrow keys move between options. */
+export function LanguageToggle({ className }: { className?: string }) {
+  const { locale, setLocale, t } = useLocale();
   return (
-    <div className="flex items-center gap-1 rounded-full border border-border bg-surface p-1">
-      <Languages className="ml-2 h-4 w-4 text-muted" />
-      {options.map((o) => (
-        <button
-          key={o.value}
-          onClick={() => setLocale(o.value)}
-          className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-            locale === o.value
-              ? "bg-accent text-accent-foreground"
-              : "text-muted hover:text-foreground"
-          }`}
+    <ToggleGroup.Root
+      type="single"
+      value={locale}
+      onValueChange={(value) => isLocale(value) && setLocale(value)}
+      aria-label={t("locale.label")}
+      className={cn("inline-flex h-9 items-center rounded-md border border-border bg-surface p-0.5", className)}
+    >
+      {LOCALES.map((value) => (
+        <ToggleGroup.Item
+          key={value}
+          value={value}
+          className={cn(
+            "focus-ring h-full rounded-sm px-2.5 text-xs font-medium text-fg-muted transition-colors hover:text-fg",
+            "data-[state=on]:bg-bg-subtle data-[state=on]:text-fg data-[state=on]:shadow-sm",
+          )}
         >
-          {o.label}
-        </button>
+          {t(`locale.${value}`)}
+        </ToggleGroup.Item>
       ))}
-    </div>
+    </ToggleGroup.Root>
   );
 }
