@@ -14,6 +14,17 @@ services:
         sync: false
       - key: HF_TOKEN
         sync: false
+      # BGE-M3 query embeddings from Cloudflare Workers AI (OpenAI-compatible endpoint, always warm)
+      - key: EMBED_API
+        value: openai
+      - key: EMBED_MODEL
+        value: "@cf/baai/bge-m3"
+      - key: EMBED_API_URL
+        sync: false
+      - key: EMBED_API_KEY
+        sync: false
+      - key: EMBED_KEEPALIVE_S
+        value: "0"
       - key: ASSETS_URL
         value: https://huggingface.co/datasets/Bunnana/thai-llm-kmitl-assets/resolve/main/assets.tar.gz
       - key: THAILLM_BASE_URL
