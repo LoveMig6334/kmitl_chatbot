@@ -227,8 +227,10 @@ python -m retrieval.scripts.build_chunks_all           # re-chunk from the OCR c
 python scripts/calibrate_retrieval.py [--rerank --k 12]  # retrieval-only: gold rank, score sweep, RSS
 RETRIEVER_CONFORMANCE=chroma pytest tests/test_retriever_conformance.py
 ```
-`rag/chroma_retriever.py:ChromaRetriever` adapts it: lazy model load on the first query (~6 s warm,
-~1 GB → ~2.3 GB RSS after the first query), `programs` → Chroma `where` + BM25 allow-list *before*
+`rag/chroma_retriever.py:ChromaRetriever` adapts it.  **Embeddings:** with `EMBED_API=openai|hf` (the default
+local `.env` and production) query vectors come from a hosted BGE-M3 (`rag/remote_embedder.py`, ~260 MB RSS, no
+torch; falls back to BM25-only when the API fails); unset it for the local model (`uv sync --extra local-embed`,
+lazy load on the first query, ~6 s warm, ~1 GB → ~2.3 GB RSS after the first query), `programs` → Chroma `where` + BM25 allow-list *before*
 fusion, `Chunk.score` = RRF score ÷ top score of the result, `page` = `page_index + 1`.
 Retrieval env: `RETRIEVE_CAND_K`, `RETRIEVAL_K`, `RRF_K`, `CODE_BOOST`, `RERANK` (+ `RERANK_DEVICE=cpu`
 on macOS), `CHROMA_DIR`, `BM25_PATH`, `CHUNKS_PATH`.  Their standalone `retrieval/api.py` is not
