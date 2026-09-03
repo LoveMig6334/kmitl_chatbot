@@ -10,6 +10,7 @@ import logging
 import os
 import time
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -84,8 +85,20 @@ def create_app(
     trust_proxy = _env_bool("TRUST_PROXY") if trust_proxy is None else trust_proxy
     event_timeout = answer_event_timeout_s if answer_event_timeout_s is not None else float(os.environ.get("ANSWER_EVENT_TIMEOUT_S", "60"))
     limiter = RateLimiter(per_minute)
+    warm = _env_bool("WARM_UP")
 
-    app = FastAPI(title="KMITL IT curriculum chat", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        # WARM_UP=1: load the retriever (BGE-M3 + Chroma for ``chroma``) before serving,
+        # so the first user request after a (re)start does not pay the model load.
+        retriever = getattr(answerer, "retriever", None)
+        if warm and hasattr(retriever, "warm_up"):
+            log.info("warming up retriever %s...", getattr(retriever, "name", "?"))
+            secs = await asyncio.to_thread(retriever.warm_up)
+            log.info("retriever ready in %.1fs", secs)
+        yield
+
+    app = FastAPI(title="KMITL IT curriculum chat", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,

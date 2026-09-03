@@ -292,3 +292,37 @@ def test_event_models():
     assert c.faculty == "IT"
     ev = AnswerEvent(type="citations", citations=[c])
     assert ev.model_dump()["citations"][0]["page"] == 12
+
+
+async def test_warm_up_runs_on_startup(monkeypatch):
+    """WARM_UP=1 → the answerer's retriever is loaded during app startup (lifespan)."""
+    calls: list[str] = []
+
+    class Retr:
+        name = "chroma"
+
+        def warm_up(self) -> float:
+            calls.append("warm")
+            return 0.01
+
+    answerer = StubAnswerer()
+    answerer.retriever = Retr()  # type: ignore[attr-defined]
+    monkeypatch.setenv("WARM_UP", "1")
+    app = create_app(answerer=answerer, gate_settings=GATE_SETTINGS)
+    async with app.router.lifespan_context(app):
+        assert calls == ["warm"]
+
+
+async def test_warm_up_off_by_default():
+    calls: list[str] = []
+
+    class Retr:
+        def warm_up(self) -> float:
+            calls.append("warm")
+            return 0.0
+
+    answerer = StubAnswerer()
+    answerer.retriever = Retr()  # type: ignore[attr-defined]
+    app = create_app(answerer=answerer, gate_settings=GATE_SETTINGS)
+    async with app.router.lifespan_context(app):
+        assert calls == []
