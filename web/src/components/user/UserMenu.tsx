@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Languages, LogOut, Monitor, Moon, Sun } from "lucide-react";
+import { ChevronDown, Languages, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -27,7 +27,18 @@ const THEME_ICONS: Record<ThemeMode, typeof Sun> = { light: Sun, dark: Moon, sys
 const THEME_MODES: ThemeMode[] = ["light", "dark", "system"];
 
 /** Avatar + name trigger with theme, language and sign-out. Reused by the chat page in Phase 2. */
-export function UserMenu({ className, showName = true }: { className?: string; showName?: boolean }) {
+export function UserMenu({
+  className,
+  showName = true,
+  onOpenSettings,
+  side = "bottom",
+}: {
+  className?: string;
+  showName?: boolean;
+  /** When given, adds a "Settings" item (profile + appearance dialog owned by the caller). */
+  onOpenSettings?: () => void;
+  side?: "top" | "bottom";
+}) {
   const { user, loading, demo } = useUser();
   const { locale, setLocale, t } = useLocale();
   const { theme, setTheme } = useTheme();
@@ -64,11 +75,11 @@ export function UserMenu({ className, showName = true }: { className?: string; s
         aria-label={t("user.menu")}
       >
         <Avatar name={name} src={user?.avatarUrl} size="md" />
-        {showName && <span className="hidden max-w-[10rem] truncate font-medium sm:inline">{name}</span>}
+        {showName && <span className="min-w-0 flex-1 truncate text-left font-medium">{name}</span>}
         <ChevronDown className="size-4 shrink-0 text-fg-subtle" aria-hidden="true" />
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent align={side === "top" ? "start" : "end"} side={side} className="w-64">
         <DropdownMenuLabel className="flex flex-col gap-0.5">
           {user && <span className="text-xs">{t("user.signedInAs")}</span>}
           <span className="truncate text-sm font-medium text-fg">{name}</span>
@@ -106,6 +117,12 @@ export function UserMenu({ className, showName = true }: { className?: string; s
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
 
+        {onOpenSettings && (
+          <DropdownMenuItem onSelect={onOpenSettings}>
+            <Settings className="size-4 text-fg-muted" aria-hidden="true" />
+            {t("user.settings")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem destructive disabled={signingOut} onSelect={onSignOut}>
           <LogOut className="size-4" aria-hidden="true" />
           {t("user.signOut")}

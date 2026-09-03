@@ -5,8 +5,7 @@ describe("decideRedirect", () => {
   it("sends signed-out users on protected pages to /login", () => {
     expect(decideRedirect("/chat", false)).toBe("/login");
     expect(decideRedirect("/", false)).toBe("/login");
-    expect(decideRedirect("/settings", false)).toBe("/login?next=%2Fsettings");
-    expect(decideRedirect("/settings/language", false)).toBe("/login?next=%2Fsettings%2Flanguage");
+    expect(decideRedirect("/chat/abc", false)).toBe("/login?next=%2Fchat%2Fabc");
   });
   it("sends signed-in users on auth pages to the chat", () => {
     for (const p of ["/login", "/register", "/signup", "/forgot-password"]) {
@@ -26,7 +25,7 @@ describe("decideRedirect", () => {
 describe("safeNextPath", () => {
   it("accepts same-origin paths only", () => {
     expect(safeNextPath("/chat")).toBe("/chat");
-    expect(safeNextPath("/settings?x=1")).toBe("/settings?x=1");
+    expect(safeNextPath("/chat/abc?x=1")).toBe("/chat/abc?x=1");
     expect(safeNextPath("//evil.com")).toBe("/chat");
     expect(safeNextPath("https://evil.com")).toBe("/chat");
     expect(safeNextPath("/\\evil.com")).toBe("/chat");
@@ -34,7 +33,7 @@ describe("safeNextPath", () => {
     expect(safeNextPath("/\n/evil.com")).toBe("/chat");
     expect(safeNextPath("/%09/evil.com")).toBe("/%09/evil.com"); // still same-origin once resolved
     expect(new URL(safeNextPath("/%09/evil.com"), "http://app.test").origin).toBe("http://app.test");
-    expect(safeNextPath("/settings/../login")).toBe("/chat"); // normalises to an auth page
+    expect(safeNextPath("/chat/../login")).toBe("/chat"); // normalises to an auth page
     expect(safeNextPath(null)).toBe("/chat");
   });
   it("never bounces back to an auth page", () => {

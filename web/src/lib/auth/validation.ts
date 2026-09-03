@@ -61,6 +61,14 @@ function confirmError(password: string, confirm: string): MessageKey | undefined
   return undefined;
 }
 
+export function validateDisplayName(name: string): MessageKey | undefined {
+  const clean = name.trim();
+  if (!clean) return "validation.required";
+  if (clean.length < DISPLAY_NAME_MIN) return "validation.displayNameTooShort";
+  if (clean.length > DISPLAY_NAME_MAX) return "validation.displayNameTooLong";
+  return undefined;
+}
+
 export function validateLogin(v: { email: string; password: string }): FieldErrors<LoginFields> {
   const errors: FieldErrors<LoginFields> = {};
   const email = emailError(v.email);
@@ -76,10 +84,8 @@ export function validateRegister(v: {
   confirm: string;
 }): FieldErrors<RegisterFields> {
   const errors: FieldErrors<RegisterFields> = {};
-  const name = v.displayName.trim();
-  if (!name) errors.displayName = "validation.required";
-  else if (name.length < DISPLAY_NAME_MIN) errors.displayName = "validation.displayNameTooShort";
-  else if (name.length > DISPLAY_NAME_MAX) errors.displayName = "validation.displayNameTooLong";
+  const name = validateDisplayName(v.displayName);
+  if (name) errors.displayName = name;
   const email = emailError(v.email);
   if (email) errors.email = email;
   const password = passwordError(v.password);

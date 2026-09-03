@@ -4,7 +4,7 @@ export const AFTER_LOGIN_PATH = "/chat";
 export const LOGIN_PATH = "/login";
 
 /** Pages that require a session. `/` is included because it forwards to the chat. */
-export const PROTECTED_PATHS = ["/", "/chat", "/settings", "/profile"] as const;
+export const PROTECTED_PATHS = ["/", "/chat"] as const;
 
 /** Pages for signed-out users; a signed-in user is bounced to the chat. */
 export const AUTH_PATHS = ["/login", "/register", "/signup", "/forgot-password"] as const;

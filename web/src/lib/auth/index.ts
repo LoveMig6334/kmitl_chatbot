@@ -1,7 +1,7 @@
 import { createSupabaseBrowserClient, supabaseConfigured } from "@/lib/supabase/client";
 import { mapAuthError, type AuthErrorCode } from "./errors";
 import { AFTER_LOGIN_PATH } from "./routes";
-import { clearDemoUser, setDemoUser } from "./demo";
+import { clearDemoUser, readDemoUser, setDemoUser } from "./demo";
 
 export { mapAuthError, authErrorKey, isAuthErrorCode, type AuthErrorCode } from "./errors";
 export * from "./validation";
@@ -122,6 +122,23 @@ export async function hasSession(): Promise<boolean> {
     return Boolean(data.session);
   } catch {
     return false;
+  }
+}
+
+/** Display name lives in `user_metadata` (demo mode: the stored demo user). */
+export async function updateDisplayName(displayName: string): Promise<AuthResult> {
+  const name = displayName.trim();
+  if (!supabaseConfigured) {
+    const current = readDemoUser();
+    setDemoUser({ email: current?.email ?? "student@example.com", displayName: name });
+    return { ok: true, demo: true };
+  }
+  try {
+    const { error } = await client().auth.updateUser({ data: { display_name: name, full_name: name } });
+    if (error) return fail(error);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
   }
 }
 

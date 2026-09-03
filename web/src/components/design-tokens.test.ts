@@ -37,8 +37,6 @@ describe("design-token hygiene in components/", () => {
         }
       });
     }
-    // The untouched Phase-2 chat/settings components are reported separately below.
-    const phase1 = offenders.filter((o) => !/^(chat|settings)\//.test(o));
-    expect(phase1).toEqual([]);
+    expect(offenders).toEqual([]);
   });
 });

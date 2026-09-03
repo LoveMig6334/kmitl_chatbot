@@ -5,7 +5,6 @@ import type { Locale } from "@/i18n";
 import { ThemeProvider } from "./ThemeProvider";
 import { LocaleProvider } from "./LocaleProvider";
 import { ToastProvider } from "@/components/ui/Toast";
-import { LegacyStoreBridge } from "./LegacyStoreBridge";
 
 export function AppProviders({
   children,
@@ -19,7 +18,6 @@ export function AppProviders({
       <LocaleProvider initialLocale={initialLocale}>
         <Tooltip.Provider delayDuration={300}>
           <ToastProvider>
-            <LegacyStoreBridge />
             {children}
           </ToastProvider>
         </Tooltip.Provider>
