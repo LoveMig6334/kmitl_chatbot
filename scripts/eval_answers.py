@@ -142,9 +142,12 @@ def evaluate(result: dict) -> None:
     """Fill ``result["checks"]`` (name -> (passed | None, detail)); None = not applicable."""
     case = result["case"]
     checks = result["checks"]
+    result["hit_retrieved"] = result["hit_context"] = None
+    result["miss_kind"] = None
     if not checks.get("gate", (False, ""))[0]:
         for name in CHECKS[1:]:
             checks[name] = (None, "")
+        result["miss_kind"] = "gate-miss"
         return
     answer: str = result["answer"]
     dbg: dict = result["debug"]
@@ -155,6 +158,7 @@ def evaluate(result: dict) -> None:
     if result.get("error"):
         for name in CHECKS[1:]:
             checks[name] = (False, f"answerer raised {result['error']}")
+        result["miss_kind"] = "error"
         return
 
     nf = case["expect_not_found"]
@@ -170,8 +174,8 @@ def evaluate(result: dict) -> None:
         if forbidden:
             detail.append(f"forbidden {forbidden}")
         checks["facts"] = (not detail, "; ".join(detail))
-    # grounding
-    bad = ungrounded_numbers(answer, context)
+    # grounding — a number copied from the question (e.g. the course code in a not-found reply) is not a hallucination
+    bad = ungrounded_numbers(answer, context + "\n" + case["question"])
     checks["grounding"] = (not bad, f"numbers not in context: {bad}" if bad else "")
     # citations
     if nf:

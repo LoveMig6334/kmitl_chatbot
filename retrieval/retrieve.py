@@ -89,7 +89,8 @@ class Retriever:
         if use_rerank:
             from FlagEmbedding import FlagReranker
             print(f"โหลด reranker {RERANK_MODEL}...", file=sys.stderr)
-            self.reranker = FlagReranker(RERANK_MODEL, use_fp16=True)
+            # RERANK_DEVICE (เช่น cpu / cuda:0): ไม่ตั้ง = ให้ FlagEmbedding เลือกเอง (บน macOS จะเลือก MPS แล้ว crash)
+            self.reranker = FlagReranker(RERANK_MODEL, use_fp16=True, devices=os.getenv("RERANK_DEVICE") or None)
 
     # ---- ชั้น dense ----
     def _dense(self, query: str, k: int, where: dict | None = None) -> list[str]:

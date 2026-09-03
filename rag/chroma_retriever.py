@@ -121,7 +121,7 @@ class ChromaRetriever:
 
     def __init__(self, *, use_rerank: bool | None = None, cand_k: int | None = None):
         self.use_rerank = _env_bool("RERANK", False) if use_rerank is None else use_rerank
-        self.cand_k = cand_k if cand_k is not None else int(os.environ.get("RETRIEVE_CAND_K", "20"))
+        self.cand_k = cand_k if cand_k is not None else int(os.environ.get("RETRIEVE_CAND_K", "40"))  # 40 > their 20: hit@12 63 % → 74 % (docs/retrieval-integration.md §5.2)
         self._impl: Any = None
         self._lock = threading.Lock()
         self.load_seconds: float | None = None
