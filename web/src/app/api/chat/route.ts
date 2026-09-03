@@ -20,6 +20,9 @@ const MAX_HISTORY = 50; // backend validation limit
 const MAX_TURN_CHARS = 8000;
 const MAX_MESSAGE_CHARS = 4000;
 
+// RAG answers (gate + retrieval + a ThaiLLM stream) can take up to a minute; Vercel's default is 60 s.
+export const maxDuration = 300;
+
 interface IncomingMessage {
   role?: unknown;
   content?: unknown;

@@ -47,3 +47,38 @@ describe("GET /api/pdf/[program]", () => {
     expect(await head.text()).toBe("");
   });
 });
+
+describe("GET /api/pdf/[program] with PDF_BASE_URL", () => {
+  const calls: { url: string; range: string | null; method: string }[] = [];
+  const realFetch = globalThis.fetch;
+  beforeAll(() => {
+    process.env.PDF_BASE_URL = "https://space.example/";
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const h = new Headers(init?.headers);
+      calls.push({ url: String(input), range: h.get("range"), method: init?.method ?? "GET" });
+      return new Response("2345", {
+        status: 206,
+        headers: { "content-type": "application/pdf", "content-range": "bytes 2-5/16", "accept-ranges": "bytes", "content-length": "4" },
+      });
+    }) as typeof fetch;
+  });
+  afterAll(() => {
+    delete process.env.PDF_BASE_URL;
+    globalThis.fetch = realFetch;
+  });
+
+  it("forwards Range to <PDF_BASE_URL>/pdf/<PROGRAM> and relays status + headers", async () => {
+    const res = await GET(new Request("http://x/api/pdf/ait", { headers: { range: "bytes=2-5" } }), ctx("ait"));
+    expect(calls.at(-1)).toEqual({ url: "https://space.example/pdf/AIT", range: "bytes=2-5", method: "GET" });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("content-range")).toBe("bytes 2-5/16");
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(await res.text()).toBe("2345");
+  });
+
+  it("still 404s unknown programs without calling upstream", async () => {
+    const before = calls.length;
+    expect((await GET(new Request("http://x/api/pdf/x"), ctx("x"))).status).toBe(404);
+    expect(calls.length).toBe(before);
+  });
+});

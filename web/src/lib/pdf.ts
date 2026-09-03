@@ -12,3 +12,9 @@ export const PDF_FILES: Record<ProgramId, string> = {
 export function pdfDir() {
   return process.env.PDF_DIR || path.resolve(process.cwd(), "../data/raw");
 }
+
+/** Backend base URL serving GET /pdf/{program} (the Hugging Face Space). Unset = read PDF_DIR locally. */
+export function pdfBaseUrl(): string | null {
+  const v = process.env.PDF_BASE_URL?.trim();
+  return v ? v.replace(/\/+$/, "") : null;
+}
