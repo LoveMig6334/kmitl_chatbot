@@ -227,6 +227,7 @@ export const th = {
   "chat.sources": "แหล่งอ้างอิง",
   "chat.sourceChip": "{program} หน้า {page}",
   "chat.sourcesTitle": "เอกสารอ้างอิง",
+  "chat.openSources": "เปิดเอกสารอ้างอิง",
   "chat.sourcePage": "หน้า {page}",
   "chat.sourceExcerpt": "ข้อความที่อ้างอิง",
   "chat.openPdf": "เปิดหน้า PDF",

@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Dialog as RadixDialog } from "radix-ui";
-import { PanelLeftOpen, SquarePen } from "lucide-react";
+import { FileText, PanelLeftOpen, SquarePen } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -12,6 +12,7 @@ import { useChatController } from "@/hooks/useChatController";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { useSidebarLayout } from "@/hooks/useSidebarLayout";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import type { ChatMessage } from "@/lib/chat";
 import { cn } from "@/lib/cn";
 import { ChatSidebar } from "./ChatSidebar";
@@ -27,6 +28,8 @@ export function ChatApp({ chatId }: { chatId: string | null }) {
   const chat = useChatController(chatId);
   const layout = useSidebarLayout();
   const tts = useSpeechSynthesis();
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const panelInline = useMediaQuery("(min-width: 1024px)");
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -38,6 +41,12 @@ export function ChatApp({ chatId }: { chatId: string | null }) {
   const setSource = useCallback(
     (next: { messageId: string; index: number } | null) => setSourceState(next ? { ...next, chatId } : null),
     [chatId],
+  );
+
+  // latest answer that carries sources — what the header button opens
+  const latestSourced = useMemo(
+    () => [...chat.messages].reverse().find((m) => m.role === "assistant" && m.sources.length > 0) ?? null,
+    [chat.messages],
   );
 
   const pastQuestions = useMemo(
@@ -99,10 +108,10 @@ export function ChatApp({ chatId }: { chatId: string | null }) {
       </aside>
 
       {/* mobile drawer */}
-      <RadixDialog.Root open={drawerOpen} onOpenChange={setDrawerOpen}>
+      <RadixDialog.Root open={drawerOpen && !isDesktop} onOpenChange={setDrawerOpen}>
         <RadixDialog.Portal>
-          <RadixDialog.Overlay className="fixed inset-0 z-40 bg-overlay md:hidden" />
-          <RadixDialog.Content className="fixed inset-y-0 left-0 z-50 w-[85vw] max-w-xs border-r border-border shadow-lg outline-none md:hidden">
+          <RadixDialog.Overlay className="fixed inset-0 z-40 bg-overlay" />
+          <RadixDialog.Content className="fixed inset-y-0 left-0 z-50 w-[85vw] max-w-xs border-r border-border shadow-lg outline-none">
             <RadixDialog.Title className="sr-only">{t("chat.history")}</RadixDialog.Title>
             {sidebar}
           </RadixDialog.Content>
@@ -117,10 +126,7 @@ export function ChatApp({ chatId }: { chatId: string | null }) {
               size="icon"
               className={cn("size-8", !layout.collapsed && "md:hidden")}
               aria-label={t("chat.openSidebar")}
-              onClick={() => {
-                if (window.matchMedia("(min-width: 768px)").matches) layout.expand();
-                else setDrawerOpen(true);
-              }}
+              onClick={() => (isDesktop ? layout.expand() : setDrawerOpen(true))}
             >
               <PanelLeftOpen className="size-4" />
             </Button>
@@ -135,6 +141,23 @@ export function ChatApp({ chatId }: { chatId: string | null }) {
           <h1 className="min-w-0 flex-1 truncate px-2 text-sm font-medium">
             {chat.activeChat?.title || t("chat.newChat")}
           </h1>
+          {latestSourced && (
+            <Tooltip content={source ? t("chat.closePanel") : t("chat.openSources")}>
+              <Button
+                variant={source ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={source !== null}
+                aria-label={source ? t("chat.closePanel") : t("chat.openSources")}
+                onClick={() => setSource(source ? null : { messageId: latestSourced.id, index: 0 })}
+              >
+                <FileText className="size-4" />
+                <span className="hidden sm:inline">{t("chat.sources")}</span>
+                <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-accent-soft px-1.5 text-xs text-accent">
+                  {latestSourced.sources.length}
+                </span>
+              </Button>
+            </Tooltip>
+          )}
         </header>
 
         <div className="flex min-h-0 flex-1">
@@ -175,19 +198,21 @@ export function ChatApp({ chatId }: { chatId: string | null }) {
             </div>
           </div>
 
-          {panel && (
-            <>
-              <aside className="hidden w-[26rem] shrink-0 border-l border-border lg:block">{panel}</aside>
-              <RadixDialog.Root open onOpenChange={(o) => !o && setSource(null)}>
-                <RadixDialog.Portal>
-                  <RadixDialog.Overlay className="fixed inset-0 z-40 bg-overlay lg:hidden" />
-                  <RadixDialog.Content className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l border-border shadow-lg outline-none lg:hidden">
-                    <RadixDialog.Title className="sr-only">{t("chat.sourcesTitle")}</RadixDialog.Title>
-                    {panel}
-                  </RadixDialog.Content>
-                </RadixDialog.Portal>
-              </RadixDialog.Root>
-            </>
+          {/* Only one instance exists per viewport: an invisible Dialog would still trap focus and
+              close on the next click, which is exactly the bug this avoids. */}
+          {panel && panelInline && (
+            <aside className="w-[26rem] shrink-0 border-l border-border">{panel}</aside>
+          )}
+          {panel && !panelInline && (
+            <RadixDialog.Root open onOpenChange={(o) => !o && setSource(null)}>
+              <RadixDialog.Portal>
+                <RadixDialog.Overlay className="fixed inset-0 z-40 bg-overlay" />
+                <RadixDialog.Content className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l border-border shadow-lg outline-none">
+                  <RadixDialog.Title className="sr-only">{t("chat.sourcesTitle")}</RadixDialog.Title>
+                  {panel}
+                </RadixDialog.Content>
+              </RadixDialog.Portal>
+            </RadixDialog.Root>
           )}
         </div>
       </main>

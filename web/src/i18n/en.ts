@@ -224,6 +224,7 @@ export const en: Dictionary = {
   "chat.sources": "Sources",
   "chat.sourceChip": "{program} p. {page}",
   "chat.sourcesTitle": "Referenced documents",
+  "chat.openSources": "Open sources",
   "chat.sourcePage": "Page {page}",
   "chat.sourceExcerpt": "Cited passage",
   "chat.openPdf": "Open PDF page",
