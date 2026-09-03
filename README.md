@@ -1,3 +1,13 @@
+---
+title: KMITL IT Curriculum Chat API
+emoji: 🎓
+colorFrom: orange
+colorTo: gray
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # thai_llm_kmitl
 
 RAG chatbot for the **KMITL Faculty of Information Technology** Open House: answers

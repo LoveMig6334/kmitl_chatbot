@@ -40,3 +40,12 @@ exclude = ["retrieval", ".venv", "web"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]   # retrieval/scripts/test_index.py is a CLI, not a pytest module
+
+[[tool.uv.index]]
+# CPU-only torch wheels for the Hugging Face Space (Linux); macOS keeps the PyPI wheels.
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]

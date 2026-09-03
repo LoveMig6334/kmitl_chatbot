@@ -1,0 +1,14 @@
+.git
+.venv
+.cache
+web
+node_modules
+docs
+tests
+notebooks
+*.ipynb
+retrieval/data/extracted
+retrieval/docs
+.env
+.DS_Store
+__pycache__
