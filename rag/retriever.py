@@ -3,8 +3,9 @@
 The answer layer (``rag/answerer.py``) only depends on ``Chunk`` and the
 ``Retriever`` protocol below.  ``FixtureRetriever`` is a keyword-overlap
 implementation over ``tests/fixtures/chunks.jsonl`` so the answer layer is
-testable today; the real ``rag.qdrant_retriever:QdrantRetriever`` replaces it
-behind the same protocol (``RETRIEVER=qdrant``).
+testable today; ``rag.chroma_retriever:ChromaRetriever`` (``RETRIEVER=chroma``)
+wraps the retrieval teammate's real hybrid pipeline (``retrieval/``) behind the
+same protocol.
 
 Score semantics: ``Chunk.score`` is "higher is better", ideally in ``[0, 1]``.
 The answer layer applies ``RETRIEVAL_MIN_SCORE`` to it (no-answer gate), so a
@@ -42,6 +43,7 @@ class Chunk(BaseModel):
     text: str
     score: float = 0.0
     synthetic: bool = Field(default=False, exclude=True)  # fixture bookkeeping only
+    debug: dict = Field(default_factory=dict, exclude=True)  # retriever internals (raw score, folio, ranks); never serialised
 
 
 @runtime_checkable
@@ -227,18 +229,23 @@ class FixtureRetriever:
 
 
 def get_retriever() -> Retriever:
-    """Select the implementation from ``RETRIEVER=fixture|qdrant`` (default fixture)."""
+    """Select the implementation from ``RETRIEVER=fixture|chroma`` (default fixture)."""
     kind = (os.environ.get("RETRIEVER") or "fixture").strip().lower()
     if kind == "fixture":
         return FixtureRetriever(os.environ.get("FIXTURE_CHUNKS_PATH") or DEFAULT_FIXTURE_PATH)
-    if kind == "qdrant":
+    if kind == "chroma":
         try:
-            module = importlib.import_module("rag.qdrant_retriever")
-            cls = module.QdrantRetriever
+            module = importlib.import_module("rag.chroma_retriever")
+            cls = module.ChromaRetriever
         except (ImportError, AttributeError) as exc:
             raise RuntimeError(
-                "RETRIEVER=qdrant but rag.qdrant_retriever:QdrantRetriever is not available "
-                f"({exc}). Ask the retrieval owner for it or set RETRIEVER=fixture."
+                f"RETRIEVER=chroma but rag.chroma_retriever:ChromaRetriever failed to import ({exc}). "
+                "Run `uv sync` (FlagEmbedding, chromadb, rank-bm25, torch) or set RETRIEVER=fixture."
             ) from exc
         return cls()
-    raise RuntimeError(f"Unknown RETRIEVER={kind!r}; expected 'fixture' or 'qdrant'.")
+    if kind == "qdrant":
+        raise RuntimeError(
+            "RETRIEVER=qdrant is gone: the real retriever is Chroma-based. Set RETRIEVER=chroma "
+            "(build the index first: python scripts/build_index.py) or RETRIEVER=fixture."
+        )
+    raise RuntimeError(f"Unknown RETRIEVER={kind!r}; expected 'fixture' or 'chroma'.")

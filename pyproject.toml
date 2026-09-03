@@ -8,11 +8,15 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "chromadb>=1.5.9",
     "fastapi>=0.141.1",
+    "flagembedding>=1.4.2",
     "jupyter>=1.1.1",
     "openai>=3.3.1",
     "pythainlp>=5.3.7",
     "python-dotenv>=1.2.3",
+    "rank-bm25>=0.2.2",
+    "torch>=2.14.0",
     "uvicorn[standard]>=0.52.4",
 ]
 
@@ -29,3 +33,10 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.4",
 ]
+
+[tool.ruff]
+# retrieval/ is the retrieval teammate's vendored pipeline (see docs/retrieval-integration.md) — not linted here.
+exclude = ["retrieval", ".venv", "web"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]   # retrieval/scripts/test_index.py is a CLI, not a pytest module

@@ -68,3 +68,26 @@ def test_strip_and_dangling_markers():
     assert strip_markers("120 หน่วยกิต [1] 4 ปี [2][3]") == "120 หน่วยกิต  4 ปี "
     assert dangling_markers("[1] ok [4] bad [0] bad", n_chunks=3) == [4, 0]
     assert dangling_markers("[1][2]", n_chunks=2) == []
+
+
+def test_flatten_tables_turns_ocr_html_into_rows():
+    from rag.context import flatten_tables
+
+    html = ('3.1.4 แผนการศึกษา\n\n<table><tr><td>รหัสวิชา</td><td>ชื่อวิชา</td><td>หน่วยกิต<br/>(บรรยาย-ปฏิบัติ)</td></tr>'
+            '<tr><td>06016401</td><td>คณิตศาสตร์สำหรับเทคโนโลยีสารสนเทศ<br/>MATHEMATICS FOR IT</td><td>3(3-0-6)</td></tr>'
+            '<tr><td colspan="2">รวม</td><td>18</td></tr></table>\n\nรวมตลอดหลักสูตร 129 หน่วยกิต')
+    flat = flatten_tables(html)
+    assert "<" not in flat and ">" not in flat
+    assert "รหัสวิชา | ชื่อวิชา | หน่วยกิต (บรรยาย-ปฏิบัติ)" in flat
+    assert "06016401 | คณิตศาสตร์สำหรับเทคโนโลยีสารสนเทศ MATHEMATICS FOR IT | 3(3-0-6)" in flat
+    assert "รวม | 18" in flat
+    assert flat.startswith("3.1.4 แผนการศึกษา") and flat.endswith("รวมตลอดหลักสูตร 129 หน่วยกิต")
+    assert flatten_tables("ไม่มีตาราง 120 หน่วยกิต") == "ไม่มีตาราง 120 หน่วยกิต"
+
+
+def test_format_chunk_flattens_tables():
+    from rag.context import format_chunk
+    from rag.retriever import Chunk
+
+    c = Chunk(chunk_id="IT2565::gen::0019", program="IT", page=26, heading_path="", text="<table><tr><td>a</td><td>b</td></tr></table>")
+    assert format_chunk(1, c) == "[1] IT หน้า 26\na | b"

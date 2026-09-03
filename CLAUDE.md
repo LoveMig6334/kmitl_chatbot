@@ -165,10 +165,10 @@ the ThaiLLM call mocked; the disconnect test drives the raw ASGI app.
 implements the `Answerer` protocol.  Retrieval is behind a seam:
 
 ```python
-# rag/retriever.py — the retrieval teammate implements this (RETRIEVER=qdrant → rag.qdrant_retriever:QdrantRetriever)
+# rag/retriever.py — RETRIEVER=fixture (default) | chroma (rag.chroma_retriever:ChromaRetriever, the real one)
 class Chunk(BaseModel):
-    chunk_id: str; program: Literal["AIT","DSBA","BIT","IT"]; page: int
-    heading_path: str; text: str; score: float = 0.0   # score: higher = better, ideally in [0, 1]
+    chunk_id: str; program: Literal["AIT","DSBA","BIT","IT"]; page: int   # page = 1-based PDF page
+    heading_path: str; text: str; score: float = 0.0   # score: higher = better, in [0, 1]; debug: dict (not serialised)
 class Retriever(Protocol):
     name: str
     async def retrieve(self, query: str, programs: list[str], k: int = 8) -> list[Chunk]: ...  # programs=[] → all
@@ -190,9 +190,10 @@ Flow (`RagAnswerer.answer`): rewrite → retrieve → no-answer gate → context
    `gatekeeper.rules.resolve_programs` when the gate saw none.
 2. **Retrieve**: `question_kind=comparison` → per-program retrieval, round-robin interleave
    (fewer than 2 programs named → all four); else one call.  Dedupe by `chunk_id`.
-3. **No-answer gate**: no chunk with `score >= RETRIEVAL_MIN_SCORE` (0.3, calibrated for the
-   fixture retriever — re-tune for Qdrant) → fixed `NOT_FOUND_REPLY[language]`, empty
-   `citations`, no model call.
+3. **No-answer gate**: no chunk with `score >= min_score` → fixed `NOT_FOUND_REPLY[language]`, empty
+   `citations`, no model call.  `min_score` is per retriever: `RETRIEVAL_MIN_SCORE` (0.3) for the fixture,
+   `RETRIEVAL_MIN_SCORE_CHROMA` (0.0) for chroma — RRF scores are rank-based and do not separate answerable
+   from unanswerable questions (see `docs/retrieval-integration.md`), so not-found relies on the model.
 4. **Context** (`rag/context.py`): `[n] {program} หน้า {page} — {heading_path}` + text, filled up to
    `CONTEXT_TOKEN_BUDGET` (4500) estimated tokens — `thai_chars/3 + other_chars/4` (no tokenizer
    is exposed by the API; deliberately over-estimates).  Lowest score dropped first, input order kept.
@@ -211,18 +212,43 @@ Flow (`RagAnswerer.answer`): rewrite → retrieve → no-answer gate → context
 
 Env: see the "Answer layer" block in `.env.example` (`RAG_*`, `RETRIEVAL_*`, `CONTEXT_TOKEN_BUDGET`).
 
+### Real retriever (`retrieval/`, vendored from the retrieval teammate) — `RETRIEVER=chroma`
+`retrieval/` is the teammate's pipeline imported verbatim (upstream `KJ-12-GH/IT-KMITL-Hackathon-RAG`)
+plus a short list of integration edits, all enumerated in **`docs/retrieval-integration.md`** — keep
+changes there surgical and add them to that list.  Typhoon-OCR'd pages (`retrieval/data/extracted/`,
+committed) → `clean.py`/`chunk.py` → `retrieval/data/chunks/all.jsonl` (committed, 2,347 chunks;
+ids `AIT::gen::0012`, `IT2565::course::06016408`; `doc_name` AIT/DSBA/IT2565→IT/IT_inter2565→BIT) →
+BGE-M3 dense in Chroma + newmm BM25, RRF-fused with a course-code boost, optional BGE reranker
+(`retrieval/retrieve.py`).  Index artifacts are gitignored:
+```
+python scripts/build_index.py                          # BGE-M3 (~2.2 GB download once) → retrieval/data/{chroma,bm25.pkl}; ~6 min CPU
+python scripts/audit_retrieval_chunks.py               # page coverage per doc (must stay ≥ 90 %)
+python -m retrieval.scripts.build_chunks_all           # re-chunk from the OCR cache (after editing clean.py/chunk.py)
+python scripts/calibrate_retrieval.py [--rerank --k 12]  # retrieval-only: gold rank, score sweep, RSS
+RETRIEVER_CONFORMANCE=chroma pytest tests/test_retriever_conformance.py
+```
+`rag/chroma_retriever.py:ChromaRetriever` adapts it: lazy model load on the first query (~6 s warm,
+~1 GB → ~2.3 GB RSS after the first query), `programs` → Chroma `where` + BM25 allow-list *before*
+fusion, `Chunk.score` = RRF score ÷ top score of the result, `page` = `page_index + 1`.
+Retrieval env: `RETRIEVE_CAND_K`, `RETRIEVAL_K`, `RRF_K`, `CODE_BOOST`, `RERANK` (+ `RERANK_DEVICE=cpu`
+on macOS), `CHROMA_DIR`, `BM25_PATH`, `CHUNKS_PATH`.  Their standalone `retrieval/api.py` is not
+mounted and their prompt is superseded by `rag/prompts.py`.
+
 ### Answer eval (deterministic, no LLM judge)
 ```
-python scripts/eval_answers.py                 # cached in .cache/eval-answers/
+python scripts/eval_answers.py                 # fixture retriever, cached in .cache/eval-answers/
+python scripts/eval_answers.py --retriever chroma --json .cache/eval-answers/run.json
 python scripts/eval_answers.py --no-cache --only cmp-ait-dsba-credits --show-all
 python scripts/eval_answers.py --no-rewrite --model typhoon-s-thaillm-8b-instruct
 ```
 Cases: `tests/eval_answers.jsonl` (`id, question, [history], programs, question_kind, language,
-must_contain, must_not_contain, expect_not_found, gold_chunk_ids`).  Checks per case: gate,
-facts, number grounding (every number in the answer must occur in the assembled context),
+must_contain, must_not_contain, expect_not_found, gold_chunk_ids`) — expectations are derived
+**only** from `docs/gold-facts.md` (real PDFs); `gold_chunk_ids` are retrieval ids.  Checks per case:
+gate, facts, number grounding (every number in the answer must occur in the assembled context),
 citations (non-empty, retrieved, gold hit), not-found behaviour, dominant-script language,
-leakage (`<think>`, dangling `[n]`).  Failures print the answer and the raw model output.
-Pure functions behind the checks live in `rag/checks.py` and are unit-tested.
+leakage (`<think>`, dangling `[n]`).  Also reported: retrieval hit rate (gold chunk retrieved / in
+context) and each failing case tagged `retrieval-miss` or `generation-miss`.  Failures print the
+answer and the raw model output.  Pure functions behind the checks live in `rag/checks.py`.
 
 ## Frontend (`web/`, Next.js 16) — redesigned in-house (see "UI conventions" below); teammate is walked through changes
 Browser → `web/src/app/api/chat/route.ts` → `web/src/lib/ai.ts:streamChat` → FastAPI `POST /chat`

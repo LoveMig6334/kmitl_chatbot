@@ -3,7 +3,8 @@
 # Ctrl-C stops both.  Logs are tee'd to .cache/dev/{fastapi,web}.log so
 # scripts/smoke_web.py can check the backend saw a client disconnect.
 #
-#   scripts/dev.sh                          # ANSWERER=rag RETRIEVER=fixture, ports 8000 / 3000
+#   scripts/dev.sh                          # ANSWERER=rag; RETRIEVER=chroma when retrieval/data/{chroma,bm25.pkl} exist, else fixture; ports 8000 / 3000
+#   RETRIEVER=fixture scripts/dev.sh        # force the keyword fixture retriever
 #   ANSWERER=stub scripts/dev.sh            # fake answers, no ThaiLLM calls
 #   API_PORT=8001 WEB_PORT=3001 scripts/dev.sh
 set -euo pipefail
@@ -15,7 +16,15 @@ mkdir -p "$LOG_DIR"
 API_PORT="${API_PORT:-8000}"
 WEB_PORT="${WEB_PORT:-3000}"
 export ANSWERER="${ANSWERER:-rag}"
-export RETRIEVER="${RETRIEVER:-fixture}"
+if [[ -z "${RETRIEVER:-}" ]]; then
+  if [[ -d "$ROOT/retrieval/data/chroma" && -f "$ROOT/retrieval/data/bm25.pkl" ]]; then
+    RETRIEVER=chroma
+  else
+    RETRIEVER=fixture
+    echo "note: retrieval index not built (python scripts/build_index.py) — using RETRIEVER=fixture" >&2
+  fi
+fi
+export RETRIEVER
 export FASTAPI_URL="${FASTAPI_URL:-http://localhost:${API_PORT}}"
 export ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-http://localhost:${WEB_PORT}}"
 

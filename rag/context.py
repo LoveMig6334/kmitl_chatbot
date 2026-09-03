@@ -30,10 +30,42 @@ def estimate_tokens(text: str) -> int:
     return math.ceil(thai / THAI_CHARS_PER_TOKEN + other / OTHER_CHARS_PER_TOKEN)
 
 
+_TABLE_RE = re.compile(r"<table[^>]*>(.*?)</table>", re.IGNORECASE | re.DOTALL)
+_ROW_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
+_CELL_RE = re.compile(r"<t[dh][^>]*>(.*?)</t[dh]>", re.IGNORECASE | re.DOTALL)
+_BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def flatten_tables(text: str) -> str:
+    """OCR'd HTML tables → one plain line per row, cells joined by `` | ``.
+
+    The real chunks (``retrieval/``) carry Typhoon-OCR markdown whose tables are raw
+    ``<table><tr><td>…`` HTML; the 8B answer model reads ``06016401 | คณิตศาสตร์… | 3(3-0-6)``
+    far more reliably than the tag soup, and it is ~40 % fewer characters under the
+    token budget.  Text without tables is returned unchanged.
+    """
+    if "<table" not in text.lower():
+        return text
+
+    def one_table(m: re.Match) -> str:
+        rows = []
+        for row in _ROW_RE.findall(m.group(1)):
+            cells = [_TAG_RE.sub("", _BR_RE.sub(" ", c)).strip() for c in _CELL_RE.findall(row)]
+            cells = [re.sub(r"\s+", " ", c) for c in cells if c]
+            if cells:
+                rows.append(" | ".join(cells))
+        return "\n" + "\n".join(rows) + "\n"
+
+    out = _TABLE_RE.sub(one_table, text)
+    out = _BR_RE.sub(" ", out)
+    return re.sub(r"\n{3,}", "\n\n", out).strip()
+
+
 def format_chunk(index: int, chunk: Chunk) -> str:
-    """``[n] {program} หน้า {page} — {heading_path}`` header line, then the text."""
+    """``[n] {program} หน้า {page} — {heading_path}`` header line, then the text (tables flattened)."""
     header = f"[{index}] {chunk.program} หน้า {chunk.page} — {chunk.heading_path}".rstrip(" —")
-    return f"{header}\n{chunk.text.strip()}"
+    return f"{header}\n{flatten_tables(chunk.text.strip())}"
 
 
 @dataclass
