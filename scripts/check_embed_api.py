@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from rag.remote_embedder import RemoteEmbedder  # noqa: E402
+from rag.remote_embedder import RemoteEmbedder
 
 PROBES = ["หลักสูตร AIT เรียนกี่ปี", "06016317 คือวิชาอะไร", "What careers can DSBA graduates pursue?"]
 
