@@ -1,12 +1,13 @@
+import { Suspense } from "react";
 import { LoginForm } from "@/components/auth/LoginForm";
-import { AuthShell } from "@/components/auth/AuthShell";
+import { pageMetadata } from "@/i18n/server";
 
-export const metadata = { title: "Login" };
+export const generateMetadata = () => pageMetadata("auth.login.pageTitle");
 
 export default function LoginPage() {
   return (
-    <AuthShell>
+    <Suspense>
       <LoginForm />
-    </AuthShell>
+    </Suspense>
   );
 }

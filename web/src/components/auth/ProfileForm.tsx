@@ -8,7 +8,7 @@ import { Select } from "@/components/ui/Select";
 import { useT } from "@/hooks/useT";
 import { useAppStore } from "@/lib/store";
 import { DEGREES, FACULTIES } from "@/lib/constants";
-import { saveProfile } from "@/lib/auth";
+import { saveProfile } from "@/lib/auth/profile";
 
 export function ProfileForm() {
   const t = useT();
@@ -80,7 +80,7 @@ export function ProfileForm() {
           options={facultyOptions}
           placeholder={t.faculty}
         />
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-xs text-danger">{error}</p>}
         <Button className="mt-1 w-full" onClick={submit}>
           {t.continue}
         </Button>

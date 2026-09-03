@@ -1,12 +1,6 @@
-import { SignUpForm } from "@/components/auth/SignUpForm";
-import { AuthShell } from "@/components/auth/AuthShell";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Sign up" };
-
+/** Old URL kept for bookmarks; the page lives at /register. */
 export default function SignUpPage() {
-  return (
-    <AuthShell>
-      <SignUpForm />
-    </AuthShell>
-  );
+  redirect("/register");
 }

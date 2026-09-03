@@ -15,6 +15,7 @@ import { useT } from "@/hooks/useT";
 import { useAppStore } from "@/lib/store";
 import type { ChatSession } from "@/lib/store";
 import { Avatar } from "@/components/ui/Avatar";
+import { signOut } from "@/lib/auth";
 
 interface Props {
   onNewChat: () => void;
@@ -30,9 +31,11 @@ export function Sidebar({ onNewChat, sessions, activeId, onSelect, onDelete }: P
   const profile = useAppStore((s) => s.profile);
   const setProfile = useAppStore((s) => s.setProfile);
 
-  function logout() {
+  async function logout() {
+    await signOut(); // clears the Supabase session (or the demo user) so the proxy lets /login through
     setProfile({ authed: false });
     router.push("/login");
+    router.refresh();
   }
 
   const menu = [

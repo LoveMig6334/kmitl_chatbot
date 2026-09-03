@@ -7,7 +7,7 @@ import { Select } from "@/components/ui/Select";
 import { useT } from "@/hooks/useT";
 import { useAppStore } from "@/lib/store";
 import { DEGREES, FACULTIES } from "@/lib/constants";
-import { saveProfile } from "@/lib/auth";
+import { saveProfile } from "@/lib/auth/profile";
 
 export function EditableProfile() {
   const t = useT();
@@ -85,7 +85,7 @@ export function EditableProfile() {
         options={facultyOptions}
         placeholder={t.faculty}
       />
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
       <div className="flex items-center gap-3">
         <Button onClick={submit}>{t.saveChanges}</Button>
         {saved && <span className="text-xs font-medium text-accent">{t.saved}</span>}

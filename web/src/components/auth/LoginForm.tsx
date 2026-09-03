@@ -2,76 +2,108 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
+import { useToast } from "@/components/ui/Toast";
+import { useTranslation } from "@/providers/LocaleProvider";
+import { useFormState } from "@/hooks/useFormState";
+import { usePageTitle } from "@/hooks/usePageTitle";
+import {
+  isAuthErrorCode,
+  safeNextPath,
+  signInWithEmail,
+  validateLogin,
+  type AuthErrorCode,
+} from "@/lib/auth";
+import { AuthLayout } from "./AuthLayout";
 import { GoogleButton } from "./GoogleButton";
-import { useT } from "@/hooks/useT";
-import { useAppStore } from "@/lib/store";
-import { signInWithEmail } from "@/lib/auth";
+import { OrDivider } from "./OrDivider";
+import { AuthErrorAlert } from "./AuthErrorAlert";
 
 export function LoginForm() {
-  const t = useT();
+  const t = useTranslation();
   const router = useRouter();
-  const setProfile = useAppStore((s) => s.setProfile);
-  const profile = useAppStore((s) => s.profile);
+  const params = useSearchParams();
+  const { toast } = useToast();
+  usePageTitle("auth.login.pageTitle");
 
-  const [cred, setCred] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const next = safeNextPath(params.get("next"));
+  const initialError = params.get("error");
+  const [formError, setFormError] = useState<AuthErrorCode | null>(
+    isAuthErrorCode(initialError) ? initialError : null,
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const form = useFormState({ email: "", password: "" }, validateLogin);
 
-  async function submit() {
-    if (!cred || !password) {
-      setError(t.login);
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (submitting) return;
+    setFormError(null);
+    if (!form.check(event.currentTarget as HTMLFormElement)) return;
+    setSubmitting(true);
+    const result = await signInWithEmail(form.values.email, form.values.password);
+    if (!result.ok) {
+      setFormError(result.code);
+      setSubmitting(false);
       return;
     }
-    setError("");
-    const res = await signInWithEmail(cred, password);
-    if (!res.ok) {
-      setError(t.login);
-      return;
-    }
-    setProfile({
-      email: cred.includes("@") ? cred : profile.email,
-      userName: profile.userName,
-      authed: true,
-    });
-    router.push("/chat");
+    toast({ title: t("toast.signedIn"), variant: "success" });
+    router.replace(next);
+    router.refresh();
   }
 
   return (
-    <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 shadow-sm">
-      <h1 className="mb-6 text-center text-3xl font-semibold tracking-tight">
-        {t.login}
-      </h1>
-      <div className="flex flex-col gap-3.5">
-        <Input
-          label={t.userName}
-          id="cred"
-          value={cred}
-          onChange={(e) => setCred(e.target.value)}
-          placeholder={t.userName}
-        />
-        <Input
-          label={t.password}
-          id="password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder={t.passwordPlaceholder}
-        />
-        {error && <p className="text-xs text-red-500">{error}</p>}
-        <Button className="mt-1 w-full" onClick={submit}>
-          {t.login}
-        </Button>
-        <GoogleButton />
-        <p className="mt-2 text-center text-xs text-muted">
-          {t.noAccount}{" "}
-          <Link href="/signup" className="font-medium text-foreground underline-offset-2 hover:underline">
-            {t.signUp}
+    <AuthLayout
+      title={t("auth.login.title")}
+      subtitle={t("auth.login.subtitle")}
+      footer={
+        <>
+          {t("auth.login.noAccount")}{" "}
+          <Link href="/register" className="focus-ring rounded-sm font-medium text-fg underline-offset-4 hover:underline">
+            {t("auth.login.registerLink")}
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <GoogleButton next={next} onError={setFormError} disabled={submitting} />
+      <OrDivider />
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4" aria-busy={submitting}>
+        <AuthErrorAlert code={formError} />
+        <Input
+          label={t("auth.email")}
+          name="email"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          autoFocus
+          placeholder={t("auth.emailPlaceholder")}
+          value={form.values.email}
+          onChange={form.set("email")}
+          error={form.errors.email && t(form.errors.email)}
+        />
+        <div className="flex flex-col gap-1.5">
+          <PasswordInput
+            label={t("auth.password")}
+            name="password"
+            autoComplete="current-password"
+            placeholder={t("auth.passwordPlaceholder")}
+            value={form.values.password}
+            onChange={form.set("password")}
+            error={form.errors.password && t(form.errors.password)}
+          />
+          <Link
+            href="/forgot-password"
+            className="focus-ring self-end rounded-sm text-xs font-medium text-fg-muted underline-offset-4 hover:text-fg hover:underline"
+          >
+            {t("auth.login.forgot")}
+          </Link>
+        </div>
+        <Button type="submit" size="lg" className="w-full" loading={submitting}>
+          {submitting ? t("auth.login.submitting") : t("auth.login.submit")}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }
