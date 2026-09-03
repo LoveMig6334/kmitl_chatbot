@@ -236,3 +236,25 @@ stream with `meta.mock = true`.  Scope chips send program ids (`PROGRAMS` in `li
 `Message.citations`, rendered by `components/chat/Citations.tsx`.
 Local stack: `scripts/dev.sh` (both servers, logs in `.cache/dev/`); `scripts/smoke_web.py`
 drives the Next route (in-scope, off-topic, abort → checks the FastAPI log for `disconnected`).
+
+## UI conventions (chatbot frontend, `web/`)
+- Design system: all colours/spacing/radius/type come from the shared tokens in `web/src/app/globals.css`
+  (`@theme` → `bg-surface`, `text-fg-muted`, `border-border`, `rounded-lg`, …); never use raw hex/px values in
+  components. `web/src/components/design-tokens.test.ts` fails on literal or Tailwind-palette colours (only
+  `components/icons/` is exempt, for brand marks).
+- Visual direction: ChatGPT / Claude.ai style — neutral palette, one accent (KMITL orange), generous whitespace,
+  subtle borders. No gradients or glass effects. Font: Anuphan (Thai + Latin) with line-heights ≥ 1.6 for stacked marks.
+- Primitives live in `web/src/components/ui/` on top of Radix (`radix-ui`): Button, Input/PasswordInput, Card,
+  Dialog, DropdownMenu, Tooltip, Toast (`useToast`), Avatar, Skeleton, Switch, Checkbox, Select, Alert.
+- i18n: every user-visible string goes through `t()` (`useTranslation()` / `useLocale()` from
+  `web/src/providers/LocaleProvider.tsx`); keys live in `web/src/i18n/th.ts` (source of truth) and `en.ts`
+  (typed to the same key set — a test fails if they drift). Thai is the default locale; `?lang=en` switches.
+- Theme: light/dark/system via `ThemeProvider` (`useTheme()`), stored in `localStorage["kmitl.theme"]`, applied as
+  `html.dark` by an inline head script (no flash); components must look correct in both.
+- Auth: Supabase Auth — Google OAuth + email/password only (`web/src/lib/auth/`). Display name lives in
+  `user_metadata.display_name`. Route protection is `web/src/proxy.ts` (Next 16 proxy, formerly middleware) using the
+  pure rules in `lib/auth/routes.ts`; without Supabase keys the app runs in demo mode (simulated sign-in, no protection).
+  Supabase errors are mapped to `AuthErrorCode` in `lib/auth/errors.ts` — raw messages are never shown.
+- Never run Supabase migrations or write to a remote project; produce SQL files and stop.
+- Backend (FastAPI) is out of scope for `web/` tasks — never edit it; report needed API changes instead.
+- Before finishing any `web/` task: `npm run lint && npm run typecheck && npm test && npm run build` (in `web/`).
