@@ -180,7 +180,7 @@ export const th = {
   "chat.example2": "DSBA กับ IT ต่างกันอย่างไร",
   "chat.example3": "หลักสูตร BIT สอนเป็นภาษาอะไร",
   "chat.example4": "ปี 1 ของสาขา IT เรียนวิชาอะไรบ้าง",
-  "chat.example5": "ค่าเทอมของแต่ละหลักสูตรเท่าไหร่",
+  "chat.example5": "เข้าเรียน DSBA ต้องมีคุณสมบัติอะไรบ้าง",
   "chat.example6": "จบ AIT แล้วทำงานอะไรได้บ้าง",
 
   // chat: composer

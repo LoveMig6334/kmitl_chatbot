@@ -177,7 +177,7 @@ export const en: Dictionary = {
   "chat.example2": "What's the difference between DSBA and IT?",
   "chat.example3": "Which language is the BIT program taught in?",
   "chat.example4": "What do first-year IT students study?",
-  "chat.example5": "What is the tuition for each program?",
+  "chat.example5": "What are the admission requirements for DSBA?",
   "chat.example6": "What careers can AIT graduates pursue?",
 
   // chat: composer
