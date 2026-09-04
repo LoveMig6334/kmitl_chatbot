@@ -86,3 +86,19 @@ def test_kmitl_out_of_scope_reply_labels_urls_correctly():
     en = build_reply("out_of_scope_kmitl", "en", topic="dorm")
     assert "Dormitory Office" in en and "reg.kmitl.ac.th" not in en and "it.kmitl.ac.th" in en
     assert "reg.kmitl.ac.th" in build_reply("out_of_scope_kmitl", "en")  # default channel is the registrar
+
+
+def test_other_faculty_reply_names_the_faculty_and_its_website():
+    th = build_reply("out_of_scope_kmitl", "th", topic="faculty",
+                     faculty_name="คณะบริหารธุรกิจ", faculty_url="https://www.kbs.kmitl.ac.th")
+    assert "คณะบริหารธุรกิจ" in th and "https://www.kbs.kmitl.ac.th" in th
+    assert "คณะนั้น" not in th
+    assert "AIT" in th and "it.kmitl.ac.th" in th  # still says what the bot can do
+    en = build_reply("out_of_scope_kmitl", "en", topic="faculty",
+                     faculty_name="KMITL Business School", faculty_url="https://www.kbs.kmitl.ac.th")
+    assert "KMITL Business School" in en and "https://www.kbs.kmitl.ac.th" in en
+    zh = build_reply("out_of_scope_kmitl", "zh", topic="faculty",
+                     faculty_name="工程学院", faculty_url=None)
+    assert "工程学院" in zh and "https://www.kmitl.ac.th" in zh  # no known site -> central KMITL site
+    # unknown faculty -> generic wording unchanged
+    assert "คณะนั้น" in build_reply("out_of_scope_kmitl", "th", topic="faculty")

@@ -15,9 +15,11 @@ from .config import (
     FACULTY_ALIASES,
     GENERIC_FIELD_ALIASES,
     INTER_ALIASES,
+    OTHER_KMITL_FACULTIES,
     OTHER_KMITL_FACULTY_PATTERNS,
     PROGRAM_CONTEXT_WORDS,
     PROGRAMS,
+    KmitlFaculty,
 )
 from .schema import Category, QuestionKind
 from .smalltalk import detect_smalltalk, smalltalk_kind
@@ -243,6 +245,9 @@ _DESCRIPTIVE_PATTERN = re.compile(
 
 
 _OTHER_KMITL_FACULTY_RE = re.compile("|".join(f"(?:{p})" for p in OTHER_KMITL_FACULTY_PATTERNS), re.IGNORECASE)
+_OTHER_KMITL_FACULTY_RES: tuple[tuple[KmitlFaculty, re.Pattern[str]], ...] = tuple(
+    (f, re.compile(f.pattern, re.IGNORECASE)) for f in OTHER_KMITL_FACULTIES
+)
 _CONTEXT_WINDOW = 25  # chars around a weak alias in which a context word must appear
 
 
@@ -265,6 +270,7 @@ class RuleResult:
     reason: str
     metadata: Metadata
     university: University | None = None  # for off_topic_other_university
+    faculty: KmitlFaculty | None = None  # for out_of_scope_kmitl (topic == "faculty")
     topic: str | None = None  # hint for the redirect template
 
 
@@ -287,6 +293,14 @@ def mentions_faculty(text: str) -> bool:
 
 def mentions_other_kmitl_faculty(text: str) -> bool:
     return bool(_OTHER_KMITL_FACULTY_RE.search(text))
+
+
+def find_other_kmitl_faculty(text: str) -> KmitlFaculty | None:
+    """The first other-KMITL faculty named in ``text`` (drives the redirect wording)."""
+    for fac, rx in _OTHER_KMITL_FACULTY_RES:
+        if rx.search(text):
+            return fac
+    return None
 
 
 def find_other_universities(text: str) -> list[University]:
@@ -475,7 +489,10 @@ def apply_rules(text: str, scope_filter: list[str] | None = None) -> RuleResult:
 
     # 4. Another KMITL faculty named, ours not -> out of scope (KMITL).
     if other_kmitl_faculty and not others and not in_scope_signal:
-        return RuleResult("out_of_scope_kmitl", 0.9, "other KMITL faculty", meta, topic="faculty")
+        return RuleResult(
+            "out_of_scope_kmitl", 0.9, "other KMITL faculty", meta, topic="faculty",
+            faculty=find_other_kmitl_faculty(stripped),
+        )
 
     # 5. KMITL logistics that the curriculum documents do not cover.
     if oos_topic and not others and not curriculum and (kmitl or in_scope_signal or not gen_topic):

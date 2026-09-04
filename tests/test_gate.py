@@ -156,3 +156,17 @@ def test_foreign_university_gets_generic_redirect():
     d = run(gate("Stanford computer science admission requirements", settings=SETTINGS, use_llm=False))
     assert d.category == "off_topic_other_university" and d.decided_by == "rule"
     assert "mytcas" not in d.direct_reply and "the university" not in d.direct_reply
+
+
+def test_other_kmitl_faculty_redirect_names_the_faculty_rule_path():
+    d = run(gate("คณะบริหารธุรกิจ สจล. เปิดสอนหลักสูตรอะไรบ้าง", settings=SETTINGS, use_llm=False))
+    assert d.category == "out_of_scope_kmitl" and d.decided_by == "rule"
+    assert "คณะบริหารธุรกิจ" in d.direct_reply and "https://www.kbs.kmitl.ac.th" in d.direct_reply
+
+
+def test_other_kmitl_faculty_redirect_names_the_faculty_llm_path(monkeypatch):
+    fake, _ = make_fake(['{"category": "out_of_scope_kmitl", "language": "en", "topic": "faculty"}'])
+    monkeypatch.setattr(gate_mod._llm, "call_classifier", fake)
+    d = run(gate("does the engineering faculty at KMITL also teach some AI courses like AIT?", settings=SETTINGS))
+    assert d.category == "out_of_scope_kmitl" and d.decided_by == "llm"
+    assert "Faculty of Engineering" in d.direct_reply

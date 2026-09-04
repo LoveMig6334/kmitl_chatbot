@@ -236,3 +236,18 @@ def test_english_transport_and_weight_loss_topics():
     assert apply_rules("how do I get to KMITL from Suvarnabhumi?").category == "out_of_scope_kmitl"
     assert apply_rules("อยากลดน้ำหนักทำยังไงดี").category == "off_topic_general"
     assert apply_rules("how to lose weight fast").category == "off_topic_general"
+
+
+def test_other_kmitl_faculty_is_identified_for_the_redirect():
+    from gatekeeper.rules import find_other_kmitl_faculty
+
+    fac = find_other_kmitl_faculty("คณะบริหารธุรกิจ สจล. เปิดสอนหลักสูตรอะไรบ้าง")
+    assert fac is not None and fac.key == "KBS"
+    assert fac.name_th == "คณะบริหารธุรกิจ" and fac.url == "https://www.kbs.kmitl.ac.th"
+    assert find_other_kmitl_faculty("KMITL business school programs?").key == "KBS"
+    assert find_other_kmitl_faculty("วิศวะ สจล. รอบ Portfolio รับกี่คน").key == "ENG"
+    assert find_other_kmitl_faculty("วิชาวิศวกรรมซอฟต์แวร์ อยู่ปีไหน") is None
+
+    r = apply_rules("คณะบริหารธุรกิจ สจล. เปิดสอนหลักสูตรอะไรบ้าง")
+    assert r.category == "out_of_scope_kmitl" and r.topic == "faculty"
+    assert r.faculty is not None and r.faculty.key == "KBS"

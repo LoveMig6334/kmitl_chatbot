@@ -26,7 +26,8 @@ defined in `gatekeeper/config.py:PROGRAMS`:
 Disambiguation (implemented in `gatekeeper/rules.py:resolve_programs`):
 bare "IT"/"ไอที" is the program only next to สาขา/หลักสูตร/ปกติ/2565 (else it
 means the faculty → `programs=[]`); อินเตอร์/inter/นานาชาติ → BIT, never IT;
-other KMITL faculties (วิศวะ, สถาปัตย์, …) → `out_of_scope_kmitl`; questions
+other KMITL faculties (วิศวะ, สถาปัตย์, บริหารธุรกิจ, …) → `out_of_scope_kmitl` — the redirect names the
+faculty and its website (`gatekeeper/config.py:OTHER_KMITL_FACULTIES`, `url=None` → www.kmitl.ac.th); questions
 naming no program are still `in_scope` with `programs=[]` (RAG searches all).
 
 ## Gatekeeper (`gatekeeper/`)

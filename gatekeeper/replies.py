@@ -240,8 +240,37 @@ def other_university_reply(
     return head + f"For {who}, please check its official admissions site at {admissions_url} or the TCAS portal ({TCAS})."
 
 
-def kmitl_out_of_scope_reply(language: Language, topic: str | None = None) -> str:
+def kmitl_out_of_scope_reply(
+    language: Language,
+    topic: str | None = None,
+    faculty_name: str | None = None,
+    faculty_url: str | None = None,
+) -> str:
+    """Redirect for KMITL topics the curriculum documents do not cover.
+
+    When another KMITL faculty was identified (``topic == "faculty"`` and a
+    ``faculty_name``), the reply names it and points at its website (or the
+    central KMITL site when the faculty's own site is unknown).
+    """
     lang = _lang(language)
+    if topic == "faculty" and faculty_name:
+        site = faculty_url or KMITL_SITE
+        if lang == "th":
+            return (
+                f"ขออภัยค่ะ ข้อมูลของ{faculty_name} สจล. ไม่อยู่ในเอกสารหลักสูตรที่ฉันมี ฉันตอบได้เฉพาะเรื่องหลักสูตร/รายวิชา/"
+                f"เกณฑ์การรับเข้าของ {_FACULTY_LIST_TH} สจล. เท่านั้น แนะนำให้ดูหลักสูตรของ{faculty_name}ได้ที่เว็บไซต์คณะ {site} "
+                f"หรือสอบถามสำนักทะเบียนและประมวลผล สจล. ({KMITL_REG}) ส่วนข้อมูลคณะเทคโนโลยีสารสนเทศดูได้ที่ {FACULTY_WEBSITE} นะคะ"
+            )
+        if lang == "zh":
+            return (
+                f"抱歉，{faculty_name}的信息不在我掌握的课程文件范围内。我只能回答{_FACULTY_LIST_ZH}的课程、科目和入学要求。"
+                f"建议您访问{faculty_name}官网 {site}，或联系先皇技术学院注册处（{KMITL_REG}）。信息技术学院官网：{FACULTY_WEBSITE}。"
+            )
+        return (
+            f"Sorry, the {faculty_name} isn't covered by the curriculum documents I have. I can only answer about the programs, "
+            f"courses and admission requirements of KMITL's {_FACULTY_LIST_EN}. Please see the {faculty_name}'s website at {site} "
+            f"or contact the KMITL Office of the Registrar ({KMITL_REG}); the Faculty of IT's site is {FACULTY_WEBSITE}."
+        )
     channel = _KMITL_CHANNELS.get(topic or "default", _KMITL_CHANNELS["default"])[lang]
     if lang == "th":
         return (
@@ -277,6 +306,8 @@ def build_reply(
     topic: str | None = None,
     seed: int | None = None,
     foreign_university: bool = False,
+    faculty_name: str | None = None,
+    faculty_url: str | None = None,
 ) -> str | None:
     """Return the direct reply for a non-``in_scope`` category (``None`` for in_scope).
 
@@ -292,7 +323,7 @@ def build_reply(
     if category == "off_topic_other_university":
         return other_university_reply(language, university_name, admissions_url, foreign=foreign_university)
     if category == "out_of_scope_kmitl":
-        return kmitl_out_of_scope_reply(language, topic)
+        return kmitl_out_of_scope_reply(language, topic, faculty_name=faculty_name, faculty_url=faculty_url)
     if category == "injection_or_abuse":
         return injection_reply(language)
     raise ValueError(f"unknown category: {category}")

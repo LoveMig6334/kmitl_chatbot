@@ -14,7 +14,7 @@ import time
 import zlib
 
 from . import llm as _llm
-from .config import Settings, load_settings
+from .config import KmitlFaculty, Settings, load_settings
 from .language import detect_language
 from .parsing import LLMVerdict, parse_verdict
 from .replies import build_reply
@@ -22,6 +22,7 @@ from .rules import (
     OTHER_UNIVERSITIES,
     Metadata,
     apply_rules,
+    find_other_kmitl_faculty,
     find_other_universities,
     smalltalk_kind,
 )
@@ -69,6 +70,8 @@ def _build_decision(
     admissions_url: str | None = None,
     foreign_university: bool = False,
     topic: str | None = None,
+    faculty_name: str | None = None,
+    faculty_url: str | None = None,
     llm_programs: list[str] | None = None,
     llm_kind: str | None = None,
     text: str = "",
@@ -87,13 +90,21 @@ def _build_decision(
         question_kind=kind if in_scope else None,  # type: ignore[arg-type]
         direct_reply=build_reply(
             category, language, university_name=university_name, admissions_url=admissions_url, topic=topic,
-            seed=zlib.crc32(text.encode("utf-8")), foreign_university=foreign_university,
+            faculty_name=faculty_name, faculty_url=faculty_url, seed=zlib.crc32(text.encode("utf-8")), foreign_university=foreign_university,
         ),
         confidence=round(confidence, 3),
         decided_by=decided_by,  # type: ignore[arg-type]
         model_used=model_used,
         latency_ms=int((time.perf_counter() - started) * 1000),
     )
+
+
+def _faculty_info(fac: KmitlFaculty | None, language: Language) -> tuple[str | None, str | None]:
+    """Name (in the reply language) and website of another KMITL faculty, or (None, None)."""
+    if fac is None:
+        return None, None
+    name = {"th": fac.name_th, "zh": fac.name_zh}.get(language, fac.name_en) or None
+    return name, fac.url
 
 
 async def _classify_with_retry(message: str, settings: Settings) -> tuple[LLMVerdict | None, str | None, list[str]]:
@@ -153,10 +164,12 @@ async def gate(
             uni_name = (rule.university.name_th if language == "th" else rule.university.name_en) or None
             uni_url = rule.university.admissions_url
             foreign = rule.university.key == "ABROAD"
+        fac_name, fac_url = _faculty_info(rule.faculty, language)
         return _build_decision(
             category=rule.category, language=language, meta=meta, confidence=rule.confidence,
             decided_by="rule", model_used=None, started=started, university_name=uni_name,
             admissions_url=uni_url, foreign_university=foreign, topic=rule.topic, text=text,
+            faculty_name=fac_name, faculty_url=fac_url,
         )
 
     settings = settings or load_settings()
@@ -182,6 +195,12 @@ async def gate(
     if category == "off_topic_other_university":
         uni_name, uni_url, foreign = _university_info(text, verdict.university)
     topic = rule.topic or verdict.topic
+    fac_name, fac_url = (None, None)
+    if category == "out_of_scope_kmitl":
+        fac = find_other_kmitl_faculty(text)
+        if fac is not None:
+            topic = "faculty"
+            fac_name, fac_url = _faculty_info(fac, language)
     if category == "greeting_smalltalk":
         # pick the template from the text itself; the model's free-form topic is only a fallback
         topic = smalltalk_kind(text) or _SMALLTALK_TOPIC_ALIASES.get(verdict.topic or "", "greeting")
@@ -190,7 +209,7 @@ async def gate(
         confidence=verdict.confidence if verdict.confidence is not None else 0.7,
         decided_by="llm", model_used=model_used, started=started, university_name=uni_name,
         admissions_url=uni_url, foreign_university=foreign, topic=topic, llm_programs=verdict.programs,
-        llm_kind=verdict.question_kind, text=text,
+        llm_kind=verdict.question_kind, text=text, faculty_name=fac_name, faculty_url=fac_url,
     )
 
 

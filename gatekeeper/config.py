@@ -154,24 +154,49 @@ def program_by_id(pid: str | None) -> Program | None:
 
 
 # Other KMITL faculties/colleges: questions about them are ``out_of_scope_kmitl``.
-# (Regex fragments, case-insensitive.)  "วิศวกรรมซอฟต์แวร์" is deliberately NOT
-# matched — it is a course name inside the IT curriculum.
-OTHER_KMITL_FACULTY_PATTERNS: tuple[str, ...] = (
-    (
+# The redirect names the faculty and points at its website (``url=None`` -> the
+# central KMITL site).  Regex fragments are case-insensitive.  "วิศวกรรมซอฟต์แวร์"
+# is deliberately NOT matched — it is a course name inside the IT curriculum.
+@dataclass(frozen=True)
+class KmitlFaculty:
+    key: str
+    name_th: str
+    name_en: str
+    name_zh: str
+    url: str | None
+    pattern: str
+
+
+OTHER_KMITL_FACULTIES: tuple[KmitlFaculty, ...] = (
+    KmitlFaculty(
+        "ENG", "คณะวิศวกรรมศาสตร์", "Faculty of Engineering", "工程学院", None,
         r"คณะวิศว|วิศวะ|วิศวกรรมศาสตร์|วิศวกรรม(ไฟฟ้า|เครื่องกล|โยธา|คอมพิวเตอร์|เคมี|อุตสาหการ|โทรคมนาคม|เกษตร|อิเล็กทรอนิกส์|ระบบควบคุม|การวัด|ชีวการแพทย์|ยานยนต์|หุ่นยนต์)"
-        r"|faculty of engineering|school of engineering|engineering faculty|工程学院"
+        r"|faculty of engineering|school of engineering|engineering faculty|工程学院",
     ),
-    r"สถาปัตย|architecture|建筑学院",
-    r"คณะวิทยาศาสตร์|คณะวิทย์|faculty of science|school of science|理学院",
-    r"บริหารธุรกิจ|คณะบริหาร|\bkbs\b|business school|business administration|商学院",
-    r"ครุศาสตร์อุตสาหกรรม|industrial education",
-    r"อุตสาหกรรมอาหาร|food industry",
-    r"เทคโนโลยีการเกษตร|agricultural technology|agro-industry",
-    r"ศิลปศาสตร์|liberal arts",
-    r"คณะแพทย|แพทยศาสตร์|faculty of medicine|medical school|医学院",
-    r"ทันตแพทย|dentistry",
-    r"นวัตกรรมการผลิต|วิทยาลัยนาโน|nanotechnology|อุตสาหกรรมการบิน|aviation|วิทยาเขตชุมพร|วิทยาลัยวิศวกรรมสังคีต|music engineering",
+    KmitlFaculty("ARCH", "คณะสถาปัตยกรรม ศิลปะและการออกแบบ", "School of Architecture, Art, and Design", "建筑学院", None,
+                 r"สถาปัตย|architecture|建筑学院"),
+    KmitlFaculty("SCI", "คณะวิทยาศาสตร์", "School of Science", "理学院", "https://www.science.kmitl.ac.th",
+                 r"คณะวิทยาศาสตร์|คณะวิทย์|faculty of science|school of science|理学院"),
+    KmitlFaculty("KBS", "คณะบริหารธุรกิจ", "KMITL Business School", "商学院", "https://www.kbs.kmitl.ac.th",
+                 r"บริหารธุรกิจ|คณะบริหาร|\bkbs\b|business school|business administration|商学院"),
+    KmitlFaculty("INDED", "คณะครุศาสตร์อุตสาหกรรมและเทคโนโลยี", "School of Industrial Education and Technology",
+                 "工业教育与技术学院", None, r"ครุศาสตร์อุตสาหกรรม|industrial education"),
+    KmitlFaculty("FOOD", "คณะอุตสาหกรรมอาหาร", "School of Food Industry", "食品工业学院", None,
+                 r"อุตสาหกรรมอาหาร|food industry"),
+    KmitlFaculty("AGRI", "คณะเทคโนโลยีการเกษตร", "School of Agricultural Technology", "农业技术学院",
+                 "https://www.agri.kmitl.ac.th", r"เทคโนโลยีการเกษตร|agricultural technology|agro-industry"),
+    KmitlFaculty("LA", "คณะศิลปศาสตร์", "School of Liberal Arts", "文学院", "https://la.kmitl.ac.th",
+                 r"ศิลปศาสตร์|liberal arts"),
+    KmitlFaculty("MED", "คณะแพทยศาสตร์", "Faculty of Medicine", "医学院", "https://md.kmitl.ac.th",
+                 r"คณะแพทย|แพทยศาสตร์|faculty of medicine|medical school|医学院"),
+    KmitlFaculty("DENT", "คณะทันตแพทยศาสตร์", "Faculty of Dentistry", "牙医学院", "https://dent.kmitl.ac.th",
+                 r"ทันตแพทย|dentistry"),
+    KmitlFaculty(
+        "OTHER", "", "", "", None,  # empty names -> generic "that faculty" wording
+        r"นวัตกรรมการผลิต|วิทยาลัยนาโน|nanotechnology|อุตสาหกรรมการบิน|aviation|วิทยาเขตชุมพร|วิทยาลัยวิศวกรรมสังคีต|music engineering",
+    ),
 )
+OTHER_KMITL_FACULTY_PATTERNS: tuple[str, ...] = tuple(f.pattern for f in OTHER_KMITL_FACULTIES)
 
 
 @dataclass(frozen=True)
