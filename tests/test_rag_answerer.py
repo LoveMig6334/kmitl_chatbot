@@ -298,3 +298,38 @@ def test_get_answerer_rag_builds_from_env(monkeypatch):
     monkeypatch.setenv("THAILLM_API_KEY", "test")
     ans = get_answerer()
     assert ans.name == "rag" and isinstance(ans, RagAnswerer) and ans.retriever.name == "fixture"
+
+
+# --- language guard: force the answer into the requested language (zh/en) --------
+import dataclasses
+
+GUARD_SETTINGS = dataclasses.replace(SETTINGS, query_rewrite=False, language_guard=True)
+
+
+def test_language_guard_translates_when_model_answers_in_wrong_language(fake, retriever):
+    llm = fake([
+        ["หลักสูตร AIT เรียน 120 หน่วยกิต [1]"],          # model wrongly answers in Thai
+        ["The AIT program requires 120 credits [1]."],   # corrective translation call
+    ])
+    a = RagAnswerer(retriever=retriever, settings=GUARD_SETTINGS)
+    events = run(collect(a.answer("AIT กี่หน่วยกิต", decision(language="en"), None, [])))
+    text = "".join(e.text for e in events if e.type == "token")
+    assert "credits" in text and "หน่วยกิต" not in text
+    assert len(llm.calls) == 2  # generation + translation
+    assert events[-2].type == "citations" and len(events[-2].citations) == 1  # [1] marker preserved
+
+
+def test_language_guard_skips_when_answer_already_matches(fake, retriever):
+    llm = fake([["The AIT program requires 120 credits [1]."]])
+    a = RagAnswerer(retriever=retriever, settings=GUARD_SETTINGS)
+    events = run(collect(a.answer("AIT กี่หน่วยกิต", decision(language="en"), None, [])))
+    text = "".join(e.text for e in events if e.type == "token")
+    assert "credits" in text and len(llm.calls) == 1  # no translation call
+
+
+def test_language_guard_leaves_thai_answers_untouched(fake, retriever):
+    llm = fake([["หลักสูตร AIT เรียน 120 หน่วยกิต [1]"]])
+    a = RagAnswerer(retriever=retriever, settings=GUARD_SETTINGS)
+    events = run(collect(a.answer("AIT กี่หน่วยกิต", decision(language="th"), None, [])))
+    text = "".join(e.text for e in events if e.type == "token")
+    assert "หน่วยกิต" in text and len(llm.calls) == 1

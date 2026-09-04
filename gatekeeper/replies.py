@@ -288,8 +288,29 @@ def kmitl_out_of_scope_reply(
     )
 
 
-def injection_reply(language: Language) -> str:
+def injection_reply(language: Language, topic: str | None = None) -> str:
     lang = _lang(language)
+    if topic == "unsafe":
+        # A request to produce harmful artefacts (malware / hacking code, credential
+        # theft). Refuse the harmful part directly, then still offer curriculum help.
+        if lang == "th":
+            return (
+                "ขออภัยค่ะ ฉันไม่สามารถช่วยเขียนโค้ดหรือให้วิธีที่ใช้เจาะระบบ เดา/ขโมยรหัสผ่าน หรือสร้างมัลแวร์ได้ "
+                "เพราะอาจนำไปใช้สร้างความเสียหายได้ค่ะ แต่ถ้าอยากรู้เรื่องหลักสูตร/รายวิชา/การรับเข้าของ "
+                f"{_FACULTY_LIST_TH} สจล. (รวมถึงวิชาด้านความปลอดภัยไซเบอร์ในหลักสูตร) ถามได้เลยนะคะ"
+            )
+        if lang == "zh":
+            return (
+                "抱歉，我无法帮忙编写用于入侵系统、破解或窃取密码、制作恶意软件的代码或方法，"
+                f"因为这些可能被用来造成危害。不过，如果你想了解{_FACULTY_LIST_ZH}的课程、科目或入学要求"
+                "（包括课程中的网络安全相关科目），欢迎随时提问。"
+            )
+        return (
+            "Sorry, I can't help write code or give instructions for breaking into systems, cracking or stealing "
+            "passwords, or building malware, since they could be used to cause harm. But I'm happy to help with the "
+            f"programs, courses and admission requirements of KMITL's {_FACULTY_LIST_EN} (including the cybersecurity "
+            "courses within the curriculum)."
+        )
     if lang == "th":
         return "ขออภัยค่ะ ฉันไม่สามารถทำตามคำขอนี้ได้ ฉันช่วยตอบคำถามเกี่ยวกับหลักสูตรของคณะเทคโนโลยีสารสนเทศ สจล. ได้เท่านั้น"
     if lang == "zh":
@@ -325,5 +346,5 @@ def build_reply(
     if category == "out_of_scope_kmitl":
         return kmitl_out_of_scope_reply(language, topic, faculty_name=faculty_name, faculty_url=faculty_url)
     if category == "injection_or_abuse":
-        return injection_reply(language)
+        return injection_reply(language, topic)
     raise ValueError(f"unknown category: {category}")

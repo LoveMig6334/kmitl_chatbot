@@ -71,6 +71,58 @@ _INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
 )
 
 # --------------------------------------------------------------------------- #
+# Unsafe requests (offensive-security / malware code, credential theft, …).
+# These are a REQUEST TO PRODUCE harmful artefacts, not the security *field* of
+# study — every pattern pairs a "do it for me" verb with a harmful target, so
+# "AIT เรียน cybersecurity ไหม" / "does BIT teach ethical hacking" stay in scope.
+# Routed to ``injection_or_abuse`` (topic="unsafe") even next to a curriculum
+# keyword, because the deterministic injection layer wins first.
+# --------------------------------------------------------------------------- #
+_HARM_TARGET = (
+    r"brute[\s-]?force|บรูทฟอร์ซ|บรูตฟอร์ซ|keylogger|คีย์ล็อก(เกอร์)?|ransomware|เรียกค่าไถ่|"
+    r"malware|มัลแวร์|spyware|สปายแวร์|trojan|โทรจัน|rootkit|backdoor|แบ็?คดอร์|botnet|บอทเน็ต|"
+    r"\bddos\b|\bdos\s*attack|sql\s*injection|phishing|ฟิชชิ?ง|ไวรัส(คอมพิวเตอร์)?|computer\s*virus|"
+    r"เดารหัสผ่าน|crack(ing)?\s*(a\s*|the\s*)?(password|wifi|license)|แคร็ก(รหัส|โปรแกรม)|"
+    r"(ขโมย|steal|ดักจับ)\s*(รหัสผ่าน|password|credentials?|บัญชี|account|cookies?|ข้อมูลบัตร)"
+)
+_HARM_ACTION_TARGET = (
+    r"(แฮ[กค]|hack)\s*(เข้า|into|someone|a\s|an\s|the\s|บัญชี|account|wifi|ไวไฟ|เฟซบุ๊ก|facebook|อีเมล|email|ระบบ|เว็บ)"
+    r"|เจาะ(ระบบ|รหัส|บัญชี|เว็บ|เซิร์ฟเวอร์|ไวไฟ|wifi)"
+    r"|bypass\s*(the\s*)?(login|authentication|2fa|password|paywall)|บายพาส(การล็อกอิน|รหัส|ระบบยืนยัน)"
+    r"|绕过(登录|验证|密码)|入侵|黑进|盗取(密码|账号)|破解密码|暴力破解"
+)
+_MAKE_VERB = (
+    r"เขียน|สร้าง|ทำ|ช่วย(เขียน|สร้าง|ทำ)?|ขอ|โค้ด|สคริปต์|เขียนโปรแกรม|โปรแกรม|พัฒนา|เจน(เนอเรท)?|"
+    r"write|create|generate|make|build|develop|code|script|give\s*me|help\s*me|"
+    r"编写|写|生成|制作|帮我(写|做|生成)?|代码|脚本|程序"
+)
+_UNSAFE_REQUEST_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # "write/create/help me … <harmful target>"
+    re.compile(rf"(?:{_MAKE_VERB}).{{0,40}}(?:{_HARM_TARGET})", re.IGNORECASE),
+    # "<harmful target> … write/create for me" (target stated first)
+    re.compile(rf"(?:{_HARM_TARGET}).{{0,40}}(?:{_MAKE_VERB})", re.IGNORECASE),
+    # "how to / teach me … hack into / crack / bypass …"
+    re.compile(
+        r"(วิธี|สอน|ช่วย|อยาก|how\s*to|how\s*do\s*i|teach\s*me|如何|怎么|怎样|教我)"
+        rf".{{0,30}}(?:{_HARM_ACTION_TARGET})",
+        re.IGNORECASE,
+    ),
+    # bare "hack into / เจาะระบบ / brute-force the password" without a preceding verb
+    re.compile(rf"(?:{_HARM_ACTION_TARGET})", re.IGNORECASE),
+    re.compile(r"(?:brute[\s-]?force|บรูทฟอร์ซ).{0,15}(รหัสผ่าน|password|บัญชี|account|login|ล็อกอิน)", re.IGNORECASE),
+)
+
+
+def is_unsafe_request(text: str) -> bool:
+    """A request to produce offensive-security / malware artefacts or steal credentials.
+
+    Distinct from the security *field of study*, which is in scope: the patterns
+    require a "make it for me / how to attack" intent paired with a harmful target.
+    """
+    return any(p.search(text) for p in _UNSAFE_REQUEST_PATTERNS)
+
+
+# --------------------------------------------------------------------------- #
 # Universities
 # --------------------------------------------------------------------------- #
 _KMITL_PATTERN = re.compile(
@@ -458,6 +510,11 @@ def apply_rules(text: str, scope_filter: list[str] | None = None) -> RuleResult:
     # 1. Injection always wins, even when wrapped in a greeting or a legitimate-looking question.
     if is_injection(stripped):
         return RuleResult("injection_or_abuse", 0.98, "injection pattern", meta)
+
+    # 1b. Unsafe requests (malware / hacking code, credential theft): refuse on safety
+    #     grounds even when a curriculum keyword is present in the same message.
+    if is_unsafe_request(stripped):
+        return RuleResult("injection_or_abuse", 0.97, "unsafe request", meta, topic="unsafe")
 
     # 2. Pure smalltalk (greeting / thanks / ok / bye / who are you / vague help opener):
     #    the whole message must be content-free, otherwise abstain (mixed → in_scope via the LLM).

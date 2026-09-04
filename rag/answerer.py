@@ -28,6 +28,7 @@ from gatekeeper.rules import resolve_programs
 from gatekeeper.schema import GateDecision
 
 from . import llm as _llm
+from .checks import language_matches
 from .context import AssembledContext, assemble_context, extract_markers
 from .llm import RagSettings, load_rag_settings
 from .prompts import (
@@ -36,6 +37,7 @@ from .prompts import (
     SYSTEM_PROMPT,
     build_answer_prompt,
     build_rewrite_prompt,
+    build_translate_prompt,
     not_found_reply,
 )
 from .retriever import Chunk, Retriever, get_retriever
@@ -158,6 +160,33 @@ class RagAnswerer:
     def pick_model(self, decision: GateDecision) -> str:
         return self.settings.comparison_model if decision.question_kind == "comparison" else self.settings.model
 
+    async def enforce_language(self, answer: str, language: str, model: str | None, debug: dict | None) -> str:
+        """For a zh/en answer that came out in the wrong language, translate once.
+
+        Thai always stays as-is (the models answer Thai reliably). Any failure
+        keeps the original answer — a wrong-language answer beats no answer.
+        """
+        if language not in ("en", "zh", "other") or not self.settings.language_guard:
+            return answer
+        if not answer.strip() or language_matches(answer, language):
+            return answer
+        system, user = build_translate_prompt(answer, language)
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+        try:
+            from gatekeeper.parsing import strip_think
+
+            raw = await asyncio.wait_for(
+                _llm.complete_chat(messages, model or self.settings.model, self.settings, max_tokens=self.settings.max_tokens),
+                timeout=self.settings.timeout_s + 5,
+            )
+            translated = strip_think(raw or "").strip()
+        except Exception as exc:  # noqa: BLE001 # never let the guard block the answer
+            log.warning("language guard failed (%s); keeping the original answer", exc)
+            return answer
+        if debug is not None:
+            debug["language_guard"] = {"from": answer, "to": translated}
+        return translated if translated else answer
+
     async def _stream_visible(self, messages: list[dict], model: str, debug: dict | None) -> AsyncIterator[str]:
         """Visible (think-stripped) tokens; raises TimeoutError if none arrives in time."""
         max_tokens = self.settings.think_max_tokens if "think" in model else self.settings.max_tokens
@@ -249,15 +278,25 @@ class RagAnswerer:
             if debug is not None:
                 debug.update({"context": ctx.text, "context_chunks": [c.chunk_id for c in ctx.chunks], "context_tokens": ctx.tokens})
 
+            # Thai streams live; zh/en buffer so the language guard can correct a
+            # wrong-language answer (the 8B models drift back to Thai) before the
+            # client sees it.
+            stream_live = language == "th" or not self.settings.language_guard
             parts: list[str] = []
             gen = self.generate(messages, self.pick_model(decision), debug)
             async for model, text in gen:
                 model_used = model
                 parts.append(text)
-                yield AnswerEvent(type="token", text=text)
+                if stream_live:
+                    yield AnswerEvent(type="token", text=text)
             full = "".join(parts)
             if not full.strip():
                 full = not_found_reply(language)
+            elif not stream_live:
+                full = await self.enforce_language(full, language, model_used, debug)
+            # Emit anything not already streamed live: the not-found fallback (any
+            # language) and the whole buffered zh/en answer.
+            if not stream_live or not "".join(parts).strip():
                 for tok in tokenize(full):
                     yield AnswerEvent(type="token", text=tok)
 

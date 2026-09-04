@@ -14,8 +14,15 @@ from gatekeeper.config import FACULTY_WEBSITE
 
 LANGUAGE_NAMES = {"th": "ไทย", "en": "English (ตอบเป็นภาษาอังกฤษทั้งหมด)", "zh": "中文 (ตอบเป็นภาษาจีนทั้งหมด)", "other": "English (ตอบเป็นภาษาอังกฤษทั้งหมด)"}
 # Repeated right before the answer slot, in the target language itself — the 8B
-# models follow an instruction in the answer language far more reliably.
-LANGUAGE_REMINDER = {"th": "ตอบเป็นภาษาไทย", "en": "Answer in English only.", "zh": "请只用中文回答（课程名称和课程代码保持原文）。", "other": "Answer in English only."}
+# models (Thai-first) follow an instruction in the answer language far more
+# reliably.  For zh/en the reminder is emphatic because the models otherwise
+# drift back to Thai on longer, descriptive answers.
+LANGUAGE_REMINDER = {
+    "th": "ตอบเป็นภาษาไทย",
+    "en": "IMPORTANT: Write the ENTIRE answer in English. Do NOT use Thai. Keep only program names and course codes as in the documents.",
+    "zh": "重要：整个回答必须用中文（简体）书写，不要使用泰文。只有课程名称和课程代码保持原文。",
+    "other": "IMPORTANT: Write the ENTIRE answer in English. Do NOT use Thai.",
+}
 
 # Canonical "not found" phrases.  The model is told to use them verbatim; the
 # answerer and the eval look for them to decide that an answer is a not-found.
@@ -93,6 +100,36 @@ SYSTEM_PROMPT = f"""คุณคือผู้ช่วยตอบคำถา
 ภาษาที่ต้องใช้ตอบ: English (ตอบเป็นภาษาอังกฤษทั้งหมด)
 คำถาม: What English score does BIT require?
 คำตอบ: BIT requires an IELTS score of at least 6.0 [1]"""
+
+
+# --------------------------------------------------------------------------- #
+# Language guard: rewrite an answer that came out in the wrong language.
+# The Thai-first 8B models sometimes answer a zh/en question in Thai; this is a
+# pure translation (one call), preserving the grounding so citations still map.
+# --------------------------------------------------------------------------- #
+_TRANSLATE_TARGET = {
+    "en": "English",
+    "zh": "Simplified Chinese (简体中文)",
+    "other": "English",
+}
+
+
+def build_translate_prompt(answer: str, language: str) -> tuple[str, str]:
+    """(system, user) for translating ``answer`` into ``language`` verbatim in meaning.
+
+    Keeps the ``[n]`` citation markers, program names (AIT/DSBA/BIT/IT), course
+    codes and every number exactly as they appear, so the answerer's citation
+    and grounding checks keep working on the translated text.
+    """
+    target = _TRANSLATE_TARGET.get(language, "English")
+    system = (
+        f"You translate a university-chatbot answer into {target}. Rules: translate the meaning exactly; "
+        "do NOT add, drop or change any fact or number; keep every citation marker like [1] or [2][3] in the "
+        "same place; keep program names (AIT, DSBA, BIT, IT), course names and course codes as written; "
+        f"output ONLY the translated answer in {target}, nothing else."
+    )
+    user = f"Translate this answer into {target}:\n\n{answer}"
+    return system, user
 
 
 def build_answer_prompt(context: str, question: str, language: str) -> str:

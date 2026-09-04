@@ -102,3 +102,13 @@ def test_other_faculty_reply_names_the_faculty_and_its_website():
     assert "工程学院" in zh and "https://www.kmitl.ac.th" in zh  # no known site -> central KMITL site
     # unknown faculty -> generic wording unchanged
     assert "คณะนั้น" in build_reply("out_of_scope_kmitl", "th", topic="faculty")
+
+
+def test_unsafe_request_reply_is_a_safety_refusal_that_still_offers_help():
+    th = build_reply("injection_or_abuse", "th", topic="unsafe")
+    assert "คณะเทคโนโลยีสารสนเทศ" in th  # still offers curriculum help
+    assert th != build_reply("injection_or_abuse", "th")  # distinct from the generic injection reply
+    en = build_reply("injection_or_abuse", "en", topic="unsafe")
+    assert "Information Technology" in en
+    zh = build_reply("injection_or_abuse", "zh", topic="unsafe")
+    assert len(zh) > 10

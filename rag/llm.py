@@ -63,6 +63,7 @@ class RagSettings:
     min_score: float = 0.3  # no-answer gate for FixtureRetriever (IDF-weighted overlap)
     min_score_chroma: float = 0.0  # no-answer gate for ChromaRetriever (normalised RRF, top hit = 1.0); see docs/retrieval-integration.md
     query_rewrite: bool = True
+    language_guard: bool = True  # for zh/en answers, one corrective pass if the model drifts to Thai
     base_url: str = DEFAULT_BASE_URL
     api_key: str | None = None
     cache_dir: str | None = None
@@ -99,6 +100,7 @@ def load_rag_settings(**overrides: object) -> RagSettings:
         "min_score": float(env.get("RETRIEVAL_MIN_SCORE", "0.3")),
         "min_score_chroma": float(env.get("RETRIEVAL_MIN_SCORE_CHROMA", "0.0")),
         "query_rewrite": _env_bool("RAG_QUERY_REWRITE", True),
+        "language_guard": _env_bool("RAG_LANGUAGE_GUARD", True),
         "base_url": env.get("THAILLM_BASE_URL", DEFAULT_BASE_URL),
         "api_key": env.get("THAILLM_API_KEY"),
         "cache_dir": env.get("RAG_CACHE_DIR") or None,
