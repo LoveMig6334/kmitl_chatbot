@@ -333,3 +333,30 @@ def test_language_guard_leaves_thai_answers_untouched(fake, retriever):
     events = run(collect(a.answer("AIT กี่หน่วยกิต", decision(language="th"), None, [])))
     text = "".join(e.text for e in events if e.type == "token")
     assert "หน่วยกิต" in text and len(llm.calls) == 1
+
+
+def test_language_guard_retries_when_first_translation_ignores_the_language(fake, retriever):
+    llm = fake([
+        ["หลักสูตร AIT เรียน 120 หน่วยกิต [1]"],          # answer in Thai
+        ["หลักสูตร AIT เรียน 120 หน่วยกิต [1]"],          # 1st translate call *also* Thai
+        ["The AIT program requires 120 credits [1]."],   # 2nd translate call finally English
+    ])
+    a = RagAnswerer(retriever=retriever, settings=GUARD_SETTINGS)
+    events = run(collect(a.answer("AIT กี่หน่วยกิต", decision(language="en"), None, [])))
+    text = "".join(e.text for e in events if e.type == "token")
+    assert "credits" in text and "หน่วยกิต" not in text
+    assert len(llm.calls) == 3  # generation + 2 translation attempts
+
+
+def test_language_guard_gives_up_after_attempts_and_keeps_the_grounded_answer(fake, retriever):
+    llm = fake([
+        ["หลักสูตร AIT เรียน 120 หน่วยกิต [1]"],  # answer in Thai
+        ["ยังเป็นไทยอยู่ [1]"],                    # translate attempt 1: still Thai
+        ["ก็ยังไทย [1]"],                          # translate attempt 2: still Thai
+    ])
+    a = RagAnswerer(retriever=retriever, settings=GUARD_SETTINGS)
+    dbg: dict = {}
+    events = run(collect(a.answer("AIT กี่หน่วยกิต", decision(language="en"), None, [], debug=dbg)))
+    text = "".join(e.text for e in events if e.type == "token")
+    assert "120 หน่วยกิต" in text  # original grounded answer kept
+    assert dbg["language_guard"]["gave_up"] is True and len(llm.calls) == 3

@@ -161,31 +161,39 @@ class RagAnswerer:
         return self.settings.comparison_model if decision.question_kind == "comparison" else self.settings.model
 
     async def enforce_language(self, answer: str, language: str, model: str | None, debug: dict | None) -> str:
-        """For a zh/en answer that came out in the wrong language, translate once.
+        """For a zh/en answer that came out in the wrong language, translate it.
 
-        Thai always stays as-is (the models answer Thai reliably). Any failure
-        keeps the original answer — a wrong-language answer beats no answer.
+        Thai always stays as-is (the models answer Thai reliably). The models
+        occasionally ignore the translate instruction too, so retry once; if it
+        still will not comply, keep the original — a wrong-language grounded
+        answer beats none.
         """
         if language not in ("en", "zh", "other") or not self.settings.language_guard:
             return answer
         if not answer.strip() or language_matches(answer, language):
             return answer
+        from gatekeeper.parsing import strip_think
+
         system, user = build_translate_prompt(answer, language)
         messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
-        try:
-            from gatekeeper.parsing import strip_think
-
-            raw = await asyncio.wait_for(
-                _llm.complete_chat(messages, model or self.settings.model, self.settings, max_tokens=self.settings.max_tokens),
-                timeout=self.settings.timeout_s + 5,
-            )
-            translated = strip_think(raw or "").strip()
-        except Exception as exc:  # noqa: BLE001 # never let the guard block the answer
-            log.warning("language guard failed (%s); keeping the original answer", exc)
-            return answer
+        for attempt in range(self.settings.language_guard_attempts):
+            try:
+                raw = await asyncio.wait_for(
+                    _llm.complete_chat(messages, model or self.settings.model, self.settings, max_tokens=self.settings.max_tokens),
+                    timeout=self.settings.timeout_s + 5,
+                )
+                translated = strip_think(raw or "").strip()
+            except Exception as exc:  # noqa: BLE001 # never let the guard block the answer
+                log.warning("language guard failed (%s); keeping the original answer", exc)
+                return answer
+            if translated and language_matches(translated, language):
+                if debug is not None:
+                    debug["language_guard"] = {"from": answer, "to": translated, "attempts": attempt + 1}
+                return translated
+            log.warning("language guard attempt %d did not produce %s; retrying", attempt + 1, language)
         if debug is not None:
-            debug["language_guard"] = {"from": answer, "to": translated}
-        return translated if translated else answer
+            debug["language_guard"] = {"from": answer, "to": None, "attempts": self.settings.language_guard_attempts, "gave_up": True}
+        return answer
 
     async def _stream_visible(self, messages: list[dict], model: str, debug: dict | None) -> AsyncIterator[str]:
         """Visible (think-stripped) tokens; raises TimeoutError if none arrives in time."""
