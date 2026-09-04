@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import os
 import threading
 import time
@@ -70,9 +71,24 @@ def heading_from_metadata(meta: dict[str, Any]) -> str:
     return ""
 
 
+# The AIT PDF appends the ministry curriculum-standard regulation, typeset with Thai
+# numerals ("หมวดวิชาเฉพาะรวมไม่น้อยกว่า ๗๒ หน่วยกิต" = the *minimum* for any 4-year
+# programme, not AIT's 90).  The programme bodies use Arabic numerals only, so Thai
+# numerals next to หน่วยกิต mark regulation boilerplate that misleads credit questions.
+REGULATION_CREDITS_RE = re.compile(r"[๐-๙]+\s*หน่วยกิต")
+
+
+def is_regulation_boilerplate(text: str) -> bool:
+    return REGULATION_CREDITS_RE.search(text) is not None
+
+
 def hit_to_chunk(hit: Any, score: float) -> Chunk | None:
-    """Map one of their ``Hit`` objects to a ``Chunk`` (``None`` for an unknown doc_name)."""
+    """Map one of their ``Hit`` objects to a ``Chunk`` (``None`` for an unknown doc_name
+    or a regulation-boilerplate chunk)."""
     meta: dict[str, Any] = dict(getattr(hit, "metadata", None) or {})
+    if is_regulation_boilerplate(str(getattr(hit, "text", "") or "")):
+        log.debug("chroma hit %s is regulation boilerplate; skipped", getattr(hit, "id", "?"))
+        return None
     program = DOC_NAME_TO_PROGRAM.get(str(meta.get("doc_name", "")))
     if program is None:
         log.warning("chroma hit %s has unknown doc_name %r; skipped", getattr(hit, "id", "?"), meta.get("doc_name"))
@@ -161,5 +177,6 @@ class ChromaRetriever:
         if not query.strip() or k <= 0:
             return []
         doc_names = programs_to_doc_names(programs)
-        hits = await asyncio.to_thread(self._search, query, k, doc_names)
-        return hits_to_chunks(hits)
+        # over-fetch so dropping regulation boilerplate still leaves k results
+        hits = await asyncio.to_thread(self._search, query, k + 5, doc_names)
+        return hits_to_chunks(hits)[:k]

@@ -46,6 +46,21 @@ from .streaming import ThinkStripper
 log = logging.getLogger(__name__)
 
 ALL_PROGRAMS = ["AIT", "DSBA", "BIT", "IT"]
+
+# "each programme / all four / rank them" questions need one retrieval per programme
+# (otherwise a single pooled search returns e.g. three chunks for one programme and
+# regulation text for another) — treat them like comparisons even when the gate says
+# fact_lookup.
+MULTI_PROGRAM_RE = re.compile(
+    r"แต่ละ(หลักสูตร|สาขา)|ทุก(หลักสูตร|สาขา)|ทั้ง\s*(4|๔|สี่)\s*(หลักสูตร|สาขา)|เรียง(ลำดับ)?จาก"
+    r"|(4|四|各)\s*个?\s*(专业|课程)|各专业|排列|排序|each program|all (four|4) program|rank"
+    r"|มาก(ที่สุด|กว่า)|น้อย(ที่สุด|กว่า)|most|least|highest|lowest",
+    re.IGNORECASE,
+)
+
+
+def needs_per_program_retrieval(query: str, decision: GateDecision) -> bool:
+    return decision.question_kind == "comparison" or MULTI_PROGRAM_RE.search(query) is not None
 SNIPPET_CHARS = 120
 SHORT_MESSAGE_CHARS = 40
 # Follow-up phrasings that only make sense with the previous turn.
@@ -143,9 +158,9 @@ class RagAnswerer:
 
     async def retrieve(self, query: str, programs: list[str], decision: GateDecision) -> list[Chunk]:
         k = self.settings.k
-        if decision.question_kind == "comparison":
+        if needs_per_program_retrieval(query, decision):
             targets = programs if len(programs) >= 2 else ALL_PROGRAMS
-            per = max(2, k // len(targets))
+            per = max(3, k // len(targets))
             groups = await asyncio.gather(*(self.retriever.retrieve(query, [p], per) for p in targets))
             return interleave(list(groups), k)
         chunks = await self.retriever.retrieve(query, programs, k)
