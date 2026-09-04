@@ -59,3 +59,20 @@ def test_contains_all_and_any_normalise():
     assert contains_all("เรียน 129 หน่วยกิต", ["120", "4 ปี"]) == ["120", "4 ปี"]
     assert contains_all("ค่าเทอม 32000 บาท", ["32,000"]) == [] and contains_all("ค่าเทอม 32,000 บาท", ["32000"]) == []
     assert contains_any("ไม่พบข้อมูลในเอกสารหลักสูตร ค่ะ", ["ไม่พบข้อมูลในเอกสารหลักสูตร", "not found"]) == ["ไม่พบข้อมูลในเอกสารหลักสูตร"]
+
+
+def test_answered_in_language_allows_kept_english_names():
+    from rag.checks import answered_in_language
+
+    # a real Chinese answer that keeps English course names reads as dominant "en"
+    # under dominant_script, but must count as answered-in-Chinese for the guard.
+    zh = ("IT2565课程共有3个专业方向，分别是软件开发（Software Development）、信息技术基础设施"
+          "（Information Technology Infrastructure）[1] 专业方向课程总学分共计57学分[2]")
+    assert answered_in_language(zh, "zh")
+    assert not answered_in_language(zh, "th")
+    # a Thai answer is not Chinese
+    th = "หลักสูตร IT2565 มี 3 สาขา (Software Development) [1] 57 หน่วยกิต [2]"
+    assert answered_in_language(th, "th") and not answered_in_language(th, "zh")
+    # an English answer quoting a Thai program note still counts as English
+    en = "The IT2565 program has 3 specialisation tracks and 57 credits [1][2]"
+    assert answered_in_language(en, "en") and answered_in_language(en, "other")

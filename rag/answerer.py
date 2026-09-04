@@ -28,7 +28,7 @@ from gatekeeper.rules import resolve_programs
 from gatekeeper.schema import GateDecision
 
 from . import llm as _llm
-from .checks import language_matches
+from .checks import answered_in_language
 from .context import AssembledContext, assemble_context, extract_markers
 from .llm import RagSettings, load_rag_settings
 from .prompts import (
@@ -170,7 +170,7 @@ class RagAnswerer:
         """
         if language not in ("en", "zh", "other") or not self.settings.language_guard:
             return answer
-        if not answer.strip() or language_matches(answer, language):
+        if not answer.strip() or answered_in_language(answer, language):
             return answer
         from gatekeeper.parsing import strip_think
 
@@ -179,14 +179,14 @@ class RagAnswerer:
         for attempt in range(self.settings.language_guard_attempts):
             try:
                 raw = await asyncio.wait_for(
-                    _llm.complete_chat(messages, model or self.settings.model, self.settings, max_tokens=self.settings.max_tokens),
+                    _llm.complete_chat(messages, model or self.settings.model, self.settings, max_tokens=self.settings.think_max_tokens),
                     timeout=self.settings.timeout_s + 5,
                 )
                 translated = strip_think(raw or "").strip()
             except Exception as exc:  # noqa: BLE001 # never let the guard block the answer
                 log.warning("language guard failed (%s); keeping the original answer", exc)
                 return answer
-            if translated and language_matches(translated, language):
+            if translated and answered_in_language(translated, language):
                 if debug is not None:
                     debug["language_guard"] = {"from": answer, "to": translated, "attempts": attempt + 1}
                 return translated

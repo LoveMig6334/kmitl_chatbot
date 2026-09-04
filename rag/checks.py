@@ -81,6 +81,26 @@ def language_matches(answer: str, language: str) -> bool:
     return dominant_script(answer) == expected
 
 
+def answered_in_language(answer: str, language: str) -> bool:
+    """Lenient check for the answer-language guard: is the answer written in ``language``?
+
+    Compares only the target script against Thai, so a Chinese or English answer
+    that keeps English course names / codes (as instructed) is still accepted —
+    unlike ``dominant_script``, where enough Latin course names can tip a valid
+    Chinese answer to ``en``. The failure this guards against is "answered in
+    Thai", so the rule is: the target script is present and is not out-weighed by
+    Thai.
+    """
+    c = script_counts(strip_markers(answer))
+    thai, cjk, latin = c["thai"], c["cjk"], c["latin"]
+    if language == "th":
+        return thai > 0 and thai >= cjk
+    if language == "zh":
+        return cjk > 0 and cjk >= thai
+    # en / other: Latin present and at least as much as Thai (may quote Thai names)
+    return latin > 0 and latin >= thai
+
+
 def has_think_leak(text: str) -> bool:
     return "<think>" in text.lower() or "</think>" in text.lower()
 
