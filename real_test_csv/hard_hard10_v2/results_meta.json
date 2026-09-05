@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-09-04T04:54:51.208628+00:00",
+  "git_commit": "860e57fdb7c94224a87cfcb34a56a896741df459",
+  "mode": "in-process (ASGI)",
+  "runs": 1,
+  "n_questions": 2,
+  "input": "real_test_csv/hard_hard10_blank.csv",
+  "env": {
+    "ANSWERER": "rag",
+    "RETRIEVER": "chroma",
+    "EMBED_API": "openai",
+    "GATEKEEPER_MODEL": "openthaigpt-thaillm-8b-instruct-v7.2",
+    "RAG_MODEL": "openthaigpt-thaillm-8b-instruct-v7.2",
+    "THAILLM_BASE_URL": "http://thaillm.or.th/api/v1",
+    "RAG_LANGUAGE_GUARD": "1"
+  },
+  "python": "3.12.13",
+  "total_seconds": 13.5,
+  "outputs": [
+    "results_run1.csv",
+    "results_wide.csv",
+    "results_long.csv"
+  ]
+}
